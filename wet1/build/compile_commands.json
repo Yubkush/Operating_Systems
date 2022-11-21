@@ -1,17 +1,17 @@
 [
 {
-  "directory": "/home/yuvalande/Operating_Systems/wet1/build",
-  "command": "/bin/x86_64-linux-gnu-g++-9   -g -std=gnu++14 -o CMakeFiles/skeleton_smash.dir/smash.cpp.o -c /home/yuvalande/Operating_Systems/wet1/smash.cpp",
-  "file": "/home/yuvalande/Operating_Systems/wet1/smash.cpp"
+  "directory": "/mnt/hgfs/Operating_Systems/wet1/build",
+  "command": "/usr/bin/g++    -g   -std=gnu++14 -o CMakeFiles/skeleton_smash.dir/smash.cpp.o -c /mnt/hgfs/Operating_Systems/wet1/smash.cpp",
+  "file": "/mnt/hgfs/Operating_Systems/wet1/smash.cpp"
 },
 {
-  "directory": "/home/yuvalande/Operating_Systems/wet1/build",
-  "command": "/bin/x86_64-linux-gnu-g++-9   -g -std=gnu++14 -o CMakeFiles/skeleton_smash.dir/Commands.cpp.o -c /home/yuvalande/Operating_Systems/wet1/Commands.cpp",
-  "file": "/home/yuvalande/Operating_Systems/wet1/Commands.cpp"
+  "directory": "/mnt/hgfs/Operating_Systems/wet1/build",
+  "command": "/usr/bin/g++    -g   -std=gnu++14 -o CMakeFiles/skeleton_smash.dir/Commands.cpp.o -c /mnt/hgfs/Operating_Systems/wet1/Commands.cpp",
+  "file": "/mnt/hgfs/Operating_Systems/wet1/Commands.cpp"
 },
 {
-  "directory": "/home/yuvalande/Operating_Systems/wet1/build",
-  "command": "/bin/x86_64-linux-gnu-g++-9   -g -std=gnu++14 -o CMakeFiles/skeleton_smash.dir/signals.cpp.o -c /home/yuvalande/Operating_Systems/wet1/signals.cpp",
-  "file": "/home/yuvalande/Operating_Systems/wet1/signals.cpp"
+  "directory": "/mnt/hgfs/Operating_Systems/wet1/build",
+  "command": "/usr/bin/g++    -g   -std=gnu++14 -o CMakeFiles/skeleton_smash.dir/signals.cpp.o -c /mnt/hgfs/Operating_Systems/wet1/signals.cpp",
+  "file": "/mnt/hgfs/Operating_Systems/wet1/signals.cpp"
 }
 ]

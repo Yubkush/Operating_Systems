@@ -3,17 +3,25 @@
 
 #include <vector>
 #include <string>
+#include <map>
 
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
+#define NO_FOREGROUND (-1)
+
+typedef unsigned int jid;
 
 class Command {
  protected:
   std::vector<std::string> args;
+  std::string line;
+  bool is_bg;
  public:
   Command(const char* cmd_line);
   virtual ~Command() = default;
   virtual void execute() = 0;
+  std::string& getLine() { return this->line;}
+  bool getIsBg() {return this->is_bg;}
   //virtual void prepare();
   //virtual void cleanup();
   // TODO: Add your extra methods if needed
@@ -92,43 +100,61 @@ public:
 class JobsList {
  public:
   class JobEntry {
-   // TODO: Add your data members
+    pid_t pid;
+    time_t time_created;
+    bool is_stopped;
+    Command* cmd;
+    public:
+      JobEntry(Command* cmd, pid_t pid, bool is_stopped): cmd(cmd), pid(pid), is_stopped(is_stopped) {
+        time_created = time(nullptr);
+      }
+      ~JobEntry() = default;
+      pid_t getJobPid() {return pid;}
+      pid_t getTimeCreated() {return time_created;}
+      Command* getCommand() {return cmd;}
+      bool getIsStopped() {return is_stopped;}
+      void setStopped(bool x) {this->is_stopped = x;}
   };
- // TODO: Add your data members
+ std::map<jid, JobEntry> job_map;
+ 
  public:
   JobsList();
-  ~JobsList();
-  void addJob(Command* cmd, bool isStopped = false);
+  ~JobsList() = default;
+  void addJob(Command* cmd, pid_t pid, bool isStopped = false);
   void printJobsList();
   void killAllJobs();
   void removeFinishedJobs();
-  JobEntry * getJobById(int jobId);
-  void removeJobById(int jobId);
-  JobEntry * getLastJob(int* lastJobId);
-  JobEntry *getLastStoppedJob(int *jobId);
+  JobEntry& getJobById(jid jobId);
+  void removeJobById(jid jobId);
+  JobEntry& getLastJob(jid* lastJobId);
+  JobEntry& getLastStoppedJob(jid *jobId);
+
+  class JobIdMissing: public std::exception {};
+  class EmptyList: public std::exception {};
+  class NoStoppedJob: public std::exception {};
   // TODO: Add extra methods or modify exisitng ones as needed
 };
 
 class JobsCommand : public BuiltInCommand {
- // TODO: Add your data members
+ JobsList& jobs;
  public:
-  JobsCommand(const char* cmd_line, JobsList* jobs);
-  virtual ~JobsCommand() {}
+  JobsCommand(const char* cmd_line, JobsList& jobs);
+  virtual ~JobsCommand() = default;
   void execute() override;
 };
 
 class ForegroundCommand : public BuiltInCommand {
- // TODO: Add your data members
+ JobsList& jobs;
  public:
-  ForegroundCommand(const char* cmd_line, JobsList* jobs);
+  ForegroundCommand(const char* cmd_line, JobsList& jobs);
   virtual ~ForegroundCommand() {}
   void execute() override;
 };
 
 class BackgroundCommand : public BuiltInCommand {
- // TODO: Add your data members
+ JobsList& jobs;
  public:
-  BackgroundCommand(const char* cmd_line, JobsList* jobs);
+  BackgroundCommand(const char* cmd_line, JobsList& jobs);
   virtual ~BackgroundCommand() {}
   void execute() override;
 };
@@ -173,6 +199,9 @@ class SmallShell {
  private:
   std::string prompt;
   std::string last_pwd;
+  Command* foreground_process;
+  pid_t fg_pid;
+  JobsList jobs_list;
   SmallShell();
  public:
   Command *CreateCommand(const char* cmd_line);
@@ -186,10 +215,15 @@ class SmallShell {
   }
   ~SmallShell();
   void executeCommand(const char* cmd_line);
+  JobsList& getJobsList() {return this->jobs_list;}
   std::string& getPrompt() { return prompt; } 
   void setPrompt(std::string newPrompt) { prompt = newPrompt; }
   std::string& getLastPwd() { return last_pwd; }
   void setLastPwd(std::string newLastPwd) { last_pwd = newLastPwd; }
+  Command* getForegroundProcess() { return foreground_process; }
+  void setForegroundProcess(Command* new_foreground_process) { foreground_process = new_foreground_process; }
+  pid_t getFgPid() { return fg_pid; }
+  void setFgPid(pid_t fg_pid) { this->fg_pid = fg_pid; }
   // TODO: add extra methods as needed
 };
 
