@@ -21,6 +21,7 @@ class Command {
   virtual ~Command() = default;
   virtual void execute() = 0;
   std::string& getLine() { return this->line;}
+  void setLine(std::string& line) { this->line = line;}
   bool getIsBg() {return this->is_bg;}
   //virtual void prepare();
   //virtual void cleanup();

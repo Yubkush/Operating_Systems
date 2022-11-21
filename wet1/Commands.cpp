@@ -121,6 +121,9 @@ void ChangeDirCommand::execute () {
     perror("smash error: cd: too many arguments");
     return;
   }
+  if(this->args.size() == 1){
+    return;
+  }
   char cwd[PATH_MAX+1];
   if (getcwd(cwd, sizeof(cwd)) == NULL) {
     perror("smash error: getcwd failed");
@@ -215,43 +218,101 @@ static bool is_number(const std::string& s)
     return !s.empty() && it == s.end();
 }
 
-// void ForegroundCommand::execute() {
-//   if(this->args.size() > 2 || !is_number(this->args[1])){
-//     perror("smash error: fg: invalid arguments");
+void ForegroundCommand::execute() {
+  if(this->args.size() > 2 || (this->args.size() == 2 && !is_number(this->args[1]))){
+    perror("smash error: fg: invalid arguments");
+    return;
+  }
+  try{
+    // Initalize 
+    jid job_id = 0; 
+    JobsList::JobEntry job(nullptr, 0, 0);
+    if(this->args.size() == 1){
+      job = jobs.getLastJob(&job_id);
+    }
+    else{
+      job_id = std::stoi(this->args[1]); 
+      job = jobs.getJobById(job_id);
+    }
+    pid_t pid = job.getJobPid();
+    if(kill(pid, SIGCONT) == -1){
+      perror("smash error: kill failed");
+    }
+    jobs.removeJobById(job_id); // remove fg process from job list
+    SmallShell::getInstance().setForegroundProcess(this); // update small shell fg fields
+    SmallShell::getInstance().setFgPid(pid);
+    std::cout << job.getCommand()->getLine();
+    if(job.getCommand()->getIsBg()) {
+      std::cout << "&";
+    }
+    std::cout << " : " << job.getJobPid() << endl;
+    this->setLine(job.getCommand()->getLine());
+    if(job.getCommand()->getIsBg()){
+      this->line.push_back('&');
+    }
+    if(waitpid(pid, nullptr, WUNTRACED) == -1){ // brings pid process back to fg
+      perror("smash error: waitpid failed");
+    }
+    SmallShell::getInstance().setFgPid(NO_FOREGROUND); // update small shell fg fields
+    SmallShell::getInstance().setForegroundProcess(nullptr);
+  }
+  catch(JobsList::EmptyList& e){
+    perror("smash error: fg: jobs list is empty");
+  }
+  catch(JobsList::JobIdMissing& e) {
+    fprintf(stderr, "smash error: fg: job-id %d does not exist\n", std::stoi(this->args[1]));
+  }
+}
+
+// BackgroundCommand::BackgroundCommand(const char* cmd_line, JobsList& jobs): BuiltInCommand(cmd_line), jobs(jobs) {}
+
+// void BackgroundCommand::execute() {
+//   if(this->args.size() > 2 || (this->args.size() == 2 && !is_number(this->args[1]))){
+//     perror("smash error: bg: invalid arguments");
 //     return;
 //   }
-//   if(this->args.size() == 1){
-//     try {
-//       jid last_job = 1;
-//       JobsList::JobEntry& job = jobs.getLastJob(&last_job);
-//       pid_t pid = job.getJobPid();
-//       if(kill(pid, SIGCONT) == -1){
-//         perror("smash error: kill failed");
-//       }
-//       if(waitpid(pid, nullptr, WUNTRACED) == -1){
-//         perror("smash error: waitpid failed");
-//       }
+//   try{
+//     // Initalize 
+//     jid job_id = 0; 
+//     JobsList::JobEntry job(nullptr, 0, 0);
+//     if(this->args.size() == 1){
+//       job = jobs.getLastJob(&job_id);
 //     }
-//     catch(JobsList::EmptyList& e){
-//       perror("smash error: fg: jobs list is empty");
+//     else{
+//       job_id = std::stoi(this->args[1]); 
+//       job = jobs.getJobById(job_id);
 //     }
+//     pid_t pid = job.getJobPid();
+//     if(kill(pid, SIGCONT) == -1){
+//       perror("smash error: kill failed");
+//     }
+//     jobs.removeJobById(job_id); // remove fg process from job list
+//     SmallShell::getInstance().setForegroundProcess(this); // update small shell fg fields
+//     SmallShell::getInstance().setFgPid(pid);
+//     std::cout << job.getCommand()->getLine();
+//     if(job.getCommand()->getIsBg()) {
+//       std::cout << "&";
+//     }
+//     std::cout << " : " << job.getJobPid() << endl;
+//     this->setLine(job.getCommand()->getLine());
+//     if(job.getCommand()->getIsBg()){
+//       this->line.push_back('&');
+//     }
+//     if(waitpid(pid, nullptr, WUNTRACED) == -1){ // brings pid process back to fg
+//       perror("smash error: waitpid failed");
+//     }
+//     SmallShell::getInstance().setFgPid(NO_FOREGROUND); // update small shell fg fields
+//     SmallShell::getInstance().setForegroundProcess(nullptr);
 //   }
-//   else if(this->args.size() == 2){
-//     try {
-//       JobsList::JobEntry& job = jobs.getJobById(std::stoi(this->args[1]));
-//       pid_t pid = job.getJobPid();
-//       if(kill(pid, SIGCONT) == -1){
-//         perror("smash error: kill failed");
-//       }
-//       if(waitpid(pid, nullptr, WUNTRACED) == -1){
-//         perror("smash error: waitpid failed");
-//       }
-//     }
-//     catch(JobsList::JobIdMissing& e) {
-//       fprintf(stderr, "smash error: fg: job-id %d does not exist", std::stoi(this->args[1]));
-//     }
+//   catch(JobsList::EmptyList& e){
+//     perror("smash error: fg: jobs list is empty");
+//   }
+//   catch(JobsList::JobIdMissing& e) {
+//     fprintf(stderr, "smash error: fg: job-id %d does not exist\n", std::stoi(this->args[1]));
 //   }
 // }
+
+
 
 ////////////////////////////////************************** jobs implementation
 
@@ -385,9 +446,9 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   // else if(firstWord.compare("kill") == 0) {
   //   return new KillCommand(cmd_line);
   // }
-  // else if(firstWord.compare("fg") == 0) {
-  //   return new ForegroundCommand(cmd_line);
-  // }
+  else if(firstWord.compare("fg") == 0) {
+    return new ForegroundCommand(cmd_line, SmallShell::getInstance().getJobsList());
+  }
   // else if(firstWord.compare("bg") == 0) {
   //   return new BackgroundCommand(cmd_line);
   // }
