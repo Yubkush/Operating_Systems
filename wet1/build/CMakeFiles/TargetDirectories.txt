@@ -1,3 +1,0 @@
-/home/yuvalande/Operating_Systems/wet1/build/CMakeFiles/rebuild_cache.dir
-/home/yuvalande/Operating_Systems/wet1/build/CMakeFiles/edit_cache.dir
-/home/yuvalande/Operating_Systems/wet1/build/CMakeFiles/skeleton_smash.dir
