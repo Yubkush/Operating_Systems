@@ -241,7 +241,7 @@ void ForegroundCommand::execute() {
     jobs.removeJobById(job_id); // remove fg process from job list
     SmallShell::getInstance().setForegroundProcess(this); // update small shell fg fields
     SmallShell::getInstance().setFgPid(pid);
-    std::cout << job.getCommand()->getLine();
+    std::cout << job.getCommand()->getLine(); // print command
     if(job.getCommand()->getIsBg()) {
       std::cout << "&";
     }
@@ -264,53 +264,45 @@ void ForegroundCommand::execute() {
   }
 }
 
-// BackgroundCommand::BackgroundCommand(const char* cmd_line, JobsList& jobs): BuiltInCommand(cmd_line), jobs(jobs) {}
+BackgroundCommand::BackgroundCommand(const char* cmd_line, JobsList& jobs): BuiltInCommand(cmd_line), jobs(jobs) {}
 
-// void BackgroundCommand::execute() {
-//   if(this->args.size() > 2 || (this->args.size() == 2 && !is_number(this->args[1]))){
-//     perror("smash error: bg: invalid arguments");
-//     return;
-//   }
-//   try{
-//     // Initalize 
-//     jid job_id = 0; 
-//     JobsList::JobEntry job(nullptr, 0, 0);
-//     if(this->args.size() == 1){
-//       job = jobs.getLastJob(&job_id);
-//     }
-//     else{
-//       job_id = std::stoi(this->args[1]); 
-//       job = jobs.getJobById(job_id);
-//     }
-//     pid_t pid = job.getJobPid();
-//     if(kill(pid, SIGCONT) == -1){
-//       perror("smash error: kill failed");
-//     }
-//     jobs.removeJobById(job_id); // remove fg process from job list
-//     SmallShell::getInstance().setForegroundProcess(this); // update small shell fg fields
-//     SmallShell::getInstance().setFgPid(pid);
-//     std::cout << job.getCommand()->getLine();
-//     if(job.getCommand()->getIsBg()) {
-//       std::cout << "&";
-//     }
-//     std::cout << " : " << job.getJobPid() << endl;
-//     this->setLine(job.getCommand()->getLine());
-//     if(job.getCommand()->getIsBg()){
-//       this->line.push_back('&');
-//     }
-//     if(waitpid(pid, nullptr, WUNTRACED) == -1){ // brings pid process back to fg
-//       perror("smash error: waitpid failed");
-//     }
-//     SmallShell::getInstance().setFgPid(NO_FOREGROUND); // update small shell fg fields
-//     SmallShell::getInstance().setForegroundProcess(nullptr);
-//   }
-//   catch(JobsList::EmptyList& e){
-//     perror("smash error: fg: jobs list is empty");
-//   }
-//   catch(JobsList::JobIdMissing& e) {
-//     fprintf(stderr, "smash error: fg: job-id %d does not exist\n", std::stoi(this->args[1]));
-//   }
-// }
+void BackgroundCommand::execute() {
+  if(this->args.size() > 2 || (this->args.size() == 2 && !is_number(this->args[1]))){
+    perror("smash error: bg: invalid arguments");
+    return;
+  }
+  try{
+    // Initalize 
+    jid job_id = 0; 
+    JobsList::JobEntry job(nullptr, 0, 0);
+    if(this->args.size() == 1){
+      job = jobs.getLastStoppedJob(&job_id);
+    }
+    else{
+      job_id = std::stoi(this->args[1]); 
+      job = jobs.getJobById(job_id);
+    }
+    if(!job.getIsStopped()){
+      fprintf(stderr, "smash error: bg: job-id %d is already running in the background\n", job_id);
+    }
+    pid_t pid = job.getJobPid();
+    std::cout << job.getCommand()->getLine(); // print command
+    if(job.getCommand()->getIsBg()) {
+      std::cout << "&";
+    }
+    std::cout << " : " << job.getJobPid() << endl;
+    jobs.getJobById(job_id).setStopped(false);  // mark command as running
+    if(kill(pid, SIGCONT) == -1){
+      perror("smash error: kill failed");
+    }
+  }
+  catch(const JobsList::NoStoppedJob& e){
+    perror("smash error: bg: there is no stopped jobs to resume");
+  }
+  catch(const JobsList::JobIdMissing& e) {
+    fprintf(stderr, "smash error: bg: job-id %d does not exist\n", std::stoi(this->args[1]));
+  }
+}
 
 
 
@@ -397,10 +389,10 @@ JobsList::JobEntry& JobsList::getLastJob(jid* lastJobId) {
 }
 
 JobsList::JobEntry& JobsList::getLastStoppedJob(jid *jobId) {
-  int max_stopped_jid = -1;
+  jid max_stopped_jid = -1;
   for(auto& job: this->job_map) {
-    if(job.second.getJobPid() > max_stopped_jid && job.second.getIsStopped()){
-      max_stopped_jid = job.second.getJobPid();
+    if(job.first > max_stopped_jid && job.second.getIsStopped()){
+      max_stopped_jid = job.first;
     }
   }
   if(max_stopped_jid == -1){throw NoStoppedJob();}
@@ -449,9 +441,9 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   else if(firstWord.compare("fg") == 0) {
     return new ForegroundCommand(cmd_line, SmallShell::getInstance().getJobsList());
   }
-  // else if(firstWord.compare("bg") == 0) {
-  //   return new BackgroundCommand(cmd_line);
-  // }
+  else if(firstWord.compare("bg") == 0) {
+    return new BackgroundCommand(cmd_line, SmallShell::getInstance().getJobsList());
+  }
   // else if(firstWord.compare("quit") == 0) {
   //   return new QuitCommand(cmd_line);
   // }
