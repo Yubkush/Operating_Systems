@@ -306,7 +306,14 @@ void BackgroundCommand::execute() {
   }
 }
 
+QuitCommand::QuitCommand(const char* cmd_line, JobsList& jobs): BuiltInCommand(cmd_line), jobs(jobs) {}
 
+void QuitCommand::execute() {
+  if(this->args.size() > 1 && (this->args[1]).compare("kill") == 0) {
+    jobs.killAllJobs();
+  }
+  exit(0);
+}
 
 ////////////////////////////////************************** jobs implementation
 
@@ -356,8 +363,9 @@ void JobsList::printJobsList() {
 
 void JobsList::killAllJobs() {
   removeFinishedJobs();
+  std::cout << "smash: sending SIGKILL signal to " << this->job_map.size() << " jobs:" << std::endl;
   for(auto& job: this->job_map) {
-    std::cout << job.second.getJobPid() << ": " << job.second.getCommand()->getOriginalLine() << endl;
+    std::cout << job.second.getJobPid() << ": " << job.second.getCommand()->getOriginalLine() << std::endl;
     kill(job.second.getJobPid(), SIGKILL);
   }
 }
@@ -440,9 +448,9 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   else if(firstWord.compare("bg") == 0) {
     return new BackgroundCommand(cmd_line, SmallShell::getInstance().getJobsList());
   }
-  // else if(firstWord.compare("quit") == 0) {
-  //   return new QuitCommand(cmd_line);
-  // }
+  else if(firstWord.compare("quit") == 0) {
+    return new QuitCommand(cmd_line, SmallShell::getInstance().getJobsList());
+  }
   else {
     return new ExternalCommand(cmd_line);
   }
