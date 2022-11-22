@@ -14,7 +14,7 @@ void ctrlZHandler(int sig_num) {
       SmallShell::getInstance().getForegroundProcess(),
       fg_process,
       true);
-    if(kill(fg_process, SIGSTOP) == -1){
+    if(kill(fg_process, SIGSTOP) == SYSCALL_FAIL){
         perror("smash error: kill failed");
       }
     cout << "smash: process " << fg_process << " was stopped" << endl;
@@ -25,7 +25,7 @@ void ctrlCHandler(int sig_num) {
   cout << "smash: got ctrl-C" << endl;
   pid_t fg_process = SmallShell::getInstance().getFgPid();
   if(fg_process != NO_FOREGROUND) {
-    if(kill(fg_process, SIGKILL) == -1){
+    if(kill(fg_process, SIGKILL) == SYSCALL_FAIL){
         perror("smash error: kill failed");
       }
     cout << "smash: process " << fg_process << " was killed" << endl;

@@ -4,10 +4,12 @@
 #include <vector>
 #include <string>
 #include <map>
+#include <fcntl.h>
 
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 #define NO_FOREGROUND (-1)
+#define SYSCALL_FAIL (-1)
 
 typedef unsigned int jid;
 
@@ -26,8 +28,8 @@ class Command {
   // void setLine(std::string& line) { this->line = line;}
   void setOriginalLine(std::string& original_line) { this->original_line = original_line;}
   bool getIsBg() {return this->is_bg;}
-  //virtual void prepare();
-  //virtual void cleanup();
+  virtual void prepare(){}
+  virtual void cleanup(){}
   // TODO: Add your extra methods if needed
 };
 
@@ -53,13 +55,16 @@ class PipeCommand : public Command {
 };
 
 class RedirectionCommand : public Command {
- // TODO: Add your data members
+  std::string file_name;
+  bool append;
+  int stdout_copy;
+  int file_fd;
  public:
   explicit RedirectionCommand(const char* cmd_line);
   virtual ~RedirectionCommand() {}
   void execute() override;
-  //void prepare() override;
-  //void cleanup() override;
+  void prepare() override;
+  void cleanup() override;
 };
 
 class ChangePromptCommand : public BuiltInCommand { 

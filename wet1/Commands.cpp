@@ -135,7 +135,7 @@ void ChangeDirCommand::execute () {
       perror("smash error: cd: OLDPWD not set");
     }
     int res = chdir((this->last_pwd).c_str());
-    if(res == -1){
+    if(res == SYSCALL_FAIL){
       perror("smash error: chdir failed");
       return;
     }
@@ -143,7 +143,7 @@ void ChangeDirCommand::execute () {
   }
   else{
     int res = chdir(args[1].c_str());
-    if(res == -1){
+    if(res == SYSCALL_FAIL){
       perror("smash error: chdir failed");
       return;
     }
@@ -156,7 +156,7 @@ ExternalCommand::ExternalCommand(const char* cmd_line): Command(cmd_line) {}
 void ExternalCommand::execute(){
   pid_t pid = fork();
   if(pid == 0) {
-    if(setpgrp() == -1){
+    if(setpgrp() == SYSCALL_FAIL){
       perror("smash error: setpgrp failed");
       return;
     }
@@ -168,7 +168,7 @@ void ExternalCommand::execute(){
       }
       command_args.push_back(nullptr);
       
-      if(execv(command_args[0], const_cast<char* const*>(command_args.data())) == -1){
+      if(execv(command_args[0], const_cast<char* const*>(command_args.data())) == SYSCALL_FAIL){
         std::vector<const char*> bin_args;
         bin_args.push_back((std::string("/bin/") + this->args[0]).c_str());
         for(int i = 1; i < this->args.size(); ++i) {
@@ -191,7 +191,7 @@ void ExternalCommand::execute(){
       exit(EXIT_FAILURE);
     }
   }
-  else if(pid == -1){
+  else if(pid == SYSCALL_FAIL){
     perror("smash error: fork failed");
   }
   else {
@@ -201,7 +201,7 @@ void ExternalCommand::execute(){
     else{
       SmallShell::getInstance().setForegroundProcess(this);
       SmallShell::getInstance().setFgPid(pid);
-      if(waitpid(pid, nullptr, WUNTRACED) == -1){
+      if(waitpid(pid, nullptr, WUNTRACED) == SYSCALL_FAIL){
         perror("smash error: waitpid failed");
       }
       SmallShell::getInstance().setFgPid(NO_FOREGROUND);
@@ -243,7 +243,7 @@ void ForegroundCommand::execute() {
       job = jobs.getJobById(job_id);
     }
     pid_t pid = job.getJobPid();
-    if(kill(pid, SIGCONT) == -1){
+    if(kill(pid, SIGCONT) == SYSCALL_FAIL){
       perror("smash error: kill failed");
       return;
     }
@@ -255,7 +255,7 @@ void ForegroundCommand::execute() {
     if(job.getCommand()->getIsBg()){
       this->line.push_back('&');
     }
-    if(waitpid(pid, nullptr, WUNTRACED) == -1){ // brings pid process back to fg
+    if(waitpid(pid, nullptr, WUNTRACED) == SYSCALL_FAIL){ // brings pid process back to fg
       perror("smash error: waitpid failed");
     }
     SmallShell::getInstance().setFgPid(NO_FOREGROUND); // update small shell fg fields
@@ -294,7 +294,7 @@ void BackgroundCommand::execute() {
     pid_t pid = job.getJobPid();
     std::cout << job.getCommand()->getLine() << " : " << job.getJobPid() << endl; // print command 
     jobs.getJobById(job_id).setStopped(false);  // mark command as running
-    if(kill(pid, SIGCONT) == -1){
+    if(kill(pid, SIGCONT) == SYSCALL_FAIL){
       perror("smash error: kill failed");
     }
   }
@@ -315,6 +315,66 @@ void QuitCommand::execute() {
   exit(0);
 }
 
+////////////////////////////////************************** Redirection implementation
+
+RedirectionCommand::RedirectionCommand(const char* cmd_line): Command(cmd_line), stdout_copy(STDOUT_FILENO), file_fd(-1){
+  this->file_name = this->args.back();
+  this->args.pop_back();
+  this->append = this->args.back().compare(">>") == 0;
+  this->args.pop_back();
+  
+  this->prepare();
+}
+
+void RedirectionCommand::prepare() {
+  this->stdout_copy = dup(STDOUT_FILENO);
+  if(this->stdout_copy == SYSCALL_FAIL){
+    perror("smash error: dup failed");
+    return;
+  }
+  if(close(STDOUT_FILENO) == SYSCALL_FAIL) {
+    perror("smash error: close failed");
+    return;
+  }
+  if(this->append){
+    this->file_fd = open((this->file_name).c_str(), O_WRONLY|O_APPEND|O_CREAT);
+  }
+  else {
+    this->file_fd = open((this->file_name).c_str(), O_WRONLY|O_CREAT|O_TRUNC);
+  }
+  if(this->file_fd == SYSCALL_FAIL) {
+    perror("smash error: open failed");
+  }
+}
+
+void RedirectionCommand::execute() {
+  if(this->file_fd != SYSCALL_FAIL) {
+    std::string cmd_line = "";
+    for(auto& arg: this->args) {
+      cmd_line += arg + " ";
+    }
+    cmd_line.pop_back();
+    SmallShell::getInstance().executeCommand(cmd_line.c_str());
+  }
+  cleanup();
+}
+
+void RedirectionCommand::cleanup() {
+  if(close(this->file_fd) == SYSCALL_FAIL){
+    perror("smash error: close failed");
+    return;
+  }
+  if(dup2(this->stdout_copy, STDOUT_FILENO) == SYSCALL_FAIL) {
+    perror("smash error: dup2 failed");
+    return;
+  }
+  if(close(this->stdout_copy) == SYSCALL_FAIL){
+    perror("smash error: close failed");
+    return;
+  }
+}
+
+
 ////////////////////////////////************************** jobs implementation
 
 JobsList::JobsList(): job_map() {}
@@ -325,7 +385,7 @@ void JobsList::removeFinishedJobs() {
   }
   for(auto it = this->job_map.begin(); it != this->job_map.end(); ) {
     pid_t result = waitpid(it->second.getJobPid(), nullptr, WNOHANG);
-    if(result > 0 || result == -1) {
+    if(result > 0 || result == SYSCALL_FAIL) {
       it = this->job_map.erase(it);
     }
     else {
@@ -423,8 +483,13 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   string cmd_s = _trim(string(cmd_line));
   string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
   _removeBackgroundSign(firstWord);
-
-  if (firstWord.compare("chprompt") == 0) {
+  std::vector<std::string> args;
+  _parseCommandLine(cmd_line, args);
+  
+  if(args.size() > 1 && (args[args.size()-2].compare(">") == 0 || args[args.size()-2].compare(">>") == 0)){
+    return new RedirectionCommand(cmd_line);
+  }
+  else if (firstWord.compare("chprompt") == 0) {
     return new ChangePromptCommand(cmd_line);
   }
   else if(firstWord.compare("showpid") == 0) {
