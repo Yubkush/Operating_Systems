@@ -76,7 +76,7 @@ void _removeBackgroundSign(string& cmd_line) {
 }
 
 // TODO: Add your implementation for classes in Commands.h 
-Command::Command(const char* cmd_line): line(cmd_line), is_bg(false) {
+Command::Command(const char* cmd_line): line(cmd_line), is_bg(false), original_line(cmd_line) {
   if(_isBackgroundComamnd(cmd_line)) {
     is_bg = true;
   }
@@ -168,7 +168,15 @@ void ExternalCommand::execute(){
       }
       command_args.push_back(nullptr);
       
-      execv(command_args[0], const_cast<char* const*>(command_args.data()));
+      if(execv(command_args[0], const_cast<char* const*>(command_args.data())) == -1){
+        std::vector<const char*> bin_args;
+        bin_args.push_back((std::string("/bin/") + this->args[0]).c_str());
+        for(int i = 1; i < this->args.size(); ++i) {
+          bin_args.push_back(this->args[i].c_str());
+        }
+        bin_args.push_back(nullptr);
+        execv(bin_args[0], const_cast<char* const*>(bin_args.data()));
+      }
       perror("smash error: execv failed");
       exit(EXIT_FAILURE);
     }
@@ -237,16 +245,13 @@ void ForegroundCommand::execute() {
     pid_t pid = job.getJobPid();
     if(kill(pid, SIGCONT) == -1){
       perror("smash error: kill failed");
+      return;
     }
     jobs.removeJobById(job_id); // remove fg process from job list
     SmallShell::getInstance().setForegroundProcess(this); // update small shell fg fields
     SmallShell::getInstance().setFgPid(pid);
-    std::cout << job.getCommand()->getLine(); // print command
-    if(job.getCommand()->getIsBg()) {
-      std::cout << "&";
-    }
-    std::cout << " : " << job.getJobPid() << endl;
-    this->setLine(job.getCommand()->getLine());
+    std::cout << job.getCommand()->getOriginalLine() << " : " << job.getJobPid() << endl; // print command
+    this->setOriginalLine(job.getCommand()->getOriginalLine());
     if(job.getCommand()->getIsBg()){
       this->line.push_back('&');
     }
@@ -284,13 +289,10 @@ void BackgroundCommand::execute() {
     }
     if(!job.getIsStopped()){
       fprintf(stderr, "smash error: bg: job-id %d is already running in the background\n", job_id);
+      return;
     }
     pid_t pid = job.getJobPid();
-    std::cout << job.getCommand()->getLine(); // print command
-    if(job.getCommand()->getIsBg()) {
-      std::cout << "&";
-    }
-    std::cout << " : " << job.getJobPid() << endl;
+    std::cout << job.getCommand()->getLine() << " : " << job.getJobPid() << endl; // print command 
     jobs.getJobById(job_id).setStopped(false);  // mark command as running
     if(kill(pid, SIGCONT) == -1){
       perror("smash error: kill failed");
@@ -341,11 +343,7 @@ void JobsList::addJob(Command* cmd, pid_t pid, bool isStopped) {
 void JobsList::printJobsList() {
   removeFinishedJobs();
   for(auto& job: this->job_map) {
-    std::cout << "[" << job.first << "]" 
-        << job.second.getCommand()->getLine();
-    if(job.second.getCommand()->getIsBg()) {
-      std::cout << "&";
-    }
+    std::cout << "[" << job.first << "]" << job.second.getCommand()->getOriginalLine();
     std::cout << " : " << job.second.getJobPid() << " "
     << difftime(time(nullptr), job.second.getTimeCreated()) << " secs ";
 
@@ -359,7 +357,7 @@ void JobsList::printJobsList() {
 void JobsList::killAllJobs() {
   removeFinishedJobs();
   for(auto& job: this->job_map) {
-    std::cout << job.second.getJobPid() << ": " << job.second.getCommand()->getLine() << endl;
+    std::cout << job.second.getJobPid() << ": " << job.second.getCommand()->getOriginalLine() << endl;
     kill(job.second.getJobPid(), SIGKILL);
   }
 }
@@ -389,15 +387,13 @@ JobsList::JobEntry& JobsList::getLastJob(jid* lastJobId) {
 }
 
 JobsList::JobEntry& JobsList::getLastStoppedJob(jid *jobId) {
-  jid max_stopped_jid = -1;
-  for(auto& job: this->job_map) {
-    if(job.first > max_stopped_jid && job.second.getIsStopped()){
-      max_stopped_jid = job.first;
+  for(auto i = this->job_map.rbegin(); i != this->job_map.rend(); ++i) {
+    if(i->second.getIsStopped()){
+      *jobId = i->first;
+      return i->second;
     }
   }
-  if(max_stopped_jid == -1){throw NoStoppedJob();}
-  *jobId = max_stopped_jid;
-  return getJobById(max_stopped_jid);
+  throw NoStoppedJob();
 }
 
 

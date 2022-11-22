@@ -15,13 +15,16 @@ class Command {
  protected:
   std::vector<std::string> args;
   std::string line;
+  std::string original_line;
   bool is_bg;
  public:
   Command(const char* cmd_line);
   virtual ~Command() = default;
   virtual void execute() = 0;
   std::string& getLine() { return this->line;}
-  void setLine(std::string& line) { this->line = line;}
+  std::string& getOriginalLine() { return this->original_line;}
+  // void setLine(std::string& line) { this->line = line;}
+  void setOriginalLine(std::string& original_line) { this->original_line = original_line;}
   bool getIsBg() {return this->is_bg;}
   //virtual void prepare();
   //virtual void cleanup();
