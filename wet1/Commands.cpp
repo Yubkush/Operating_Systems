@@ -337,10 +337,10 @@ void RedirectionCommand::prepare() {
     return;
   }
   if(this->append){
-    this->file_fd = open((this->file_name).c_str(), O_WRONLY|O_APPEND|O_CREAT);
+    this->file_fd = open((this->file_name).c_str(), O_RDWR|O_APPEND|O_CREAT, 0666);
   }
   else {
-    this->file_fd = open((this->file_name).c_str(), O_WRONLY|O_CREAT|O_TRUNC);
+    this->file_fd = open((this->file_name).c_str(), O_RDWR|O_CREAT|O_TRUNC, 0666);
   }
   if(this->file_fd == SYSCALL_FAIL) {
     perror("smash error: open failed");
