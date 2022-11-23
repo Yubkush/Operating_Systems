@@ -315,6 +315,37 @@ void QuitCommand::execute() {
   exit(0);
 }
 
+KillCommand::KillCommand(const char* cmd_line, JobsList& jobs): BuiltInCommand(cmd_line), jobs(jobs) {}
+
+void KillCommand::execute() {
+  std::string kill_str = this->args[1].substr(1); // get signal number
+  if(this->args.size() != 3 || 
+    this->args[1][0] != '-' ||
+    !is_number(kill_str) ||
+    !is_number(this->args[2])) {
+      perror("smash error: kill: invalid arguments");
+      return;
+  }
+  try {
+    JobsList::JobEntry& job = jobs.getJobById(std::stoi(this->args[2]));
+    int kill_num = std::stoi(kill_str);
+    if(kill(job.getJobPid(), kill_num) == -1) {
+      perror("smash error: kill failed");
+      return;
+    }
+    if(kill_num == SIGTSTP) {
+      job.setStopped(true);
+    }
+    else if(kill_num == SIGCONT) {
+      job.setStopped(false);
+    }
+    std::cout << "signal number " << kill_num << " was sent to pid " << job.getJobPid() << std::endl;
+  }
+  catch(JobsList::JobIdMissing& e) {
+    fprintf(stderr, "smash error: kill: job-id %d does not exist", std::stoi(this->args[2]));
+  }
+}
+
 ////////////////////////////////************************** Redirection implementation
 
 RedirectionCommand::RedirectionCommand(const char* cmd_line): Command(cmd_line), stdout_copy(STDOUT_FILENO), file_fd(-1){
@@ -504,9 +535,9 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   else if(firstWord.compare("jobs") == 0) {
     return new JobsCommand(cmd_line, SmallShell::getInstance().getJobsList());
   }
-  // else if(firstWord.compare("kill") == 0) {
-  //   return new KillCommand(cmd_line);
-  // }
+  else if(firstWord.compare("kill") == 0) {
+    return new KillCommand(cmd_line, SmallShell::getInstance().getJobsList());
+  }
   else if(firstWord.compare("fg") == 0) {
     return new ForegroundCommand(cmd_line, SmallShell::getInstance().getJobsList());
   }

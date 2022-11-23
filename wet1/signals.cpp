@@ -26,8 +26,8 @@ void ctrlCHandler(int sig_num) {
   pid_t fg_process = SmallShell::getInstance().getFgPid();
   if(fg_process != NO_FOREGROUND) {
     if(kill(fg_process, SIGKILL) == SYSCALL_FAIL){
-        perror("smash error: kill failed");
-      }
+      perror("smash error: kill failed");
+    }
     cout << "smash: process " << fg_process << " was killed" << endl;
     SmallShell::getInstance().setFgPid(NO_FOREGROUND);
     SmallShell::getInstance().setForegroundProcess(nullptr);
