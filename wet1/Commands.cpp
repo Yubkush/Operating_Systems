@@ -292,7 +292,7 @@ void BackgroundCommand::execute() {
       return;
     }
     pid_t pid = job.getJobPid();
-    std::cout << job.getCommand()->getLine() << " : " << job.getJobPid() << endl; // print command 
+    std::cout << job.getCommand()->getOriginalLine() << " : " << job.getJobPid() << endl; // print command 
     jobs.getJobById(job_id).setStopped(false);  // mark command as running
     if(kill(pid, SIGCONT) == SYSCALL_FAIL){
       perror("smash error: kill failed");
