@@ -122,6 +122,7 @@ void ChangeDirCommand::execute () {
     return;
   }
   if(this->args.size() == 1){
+    std::cerr << "smash error:> \"" << this->getOriginalLine() << "\"" << std::endl;
     return;
   }
   char cwd[PATH_MAX+1];
@@ -129,26 +130,23 @@ void ChangeDirCommand::execute () {
     perror("smash error: getcwd failed");
     return;
   }
+  int res = SYSCALL_FAIL;
   // if we get input - move to last dir
   if ((this->args[1]).compare("-") == 0) {
     if((this->last_pwd).compare("") == 0){
       perror("smash error: cd: OLDPWD not set");
-    }
-    int res = chdir((this->last_pwd).c_str());
-    if(res == SYSCALL_FAIL){
-      perror("smash error: chdir failed");
       return;
     }
-    last_pwd = std::string(cwd);
+    res = chdir((this->last_pwd).c_str());
   }
   else{
-    int res = chdir(args[1].c_str());
-    if(res == SYSCALL_FAIL){
-      perror("smash error: chdir failed");
-      return;
-    }
-    last_pwd = std::string(cwd);
+    res = chdir(args[1].c_str());
   }
+  if(res == SYSCALL_FAIL){
+    perror("smash error: chdir failed");
+    return;
+  }
+  last_pwd = std::string(cwd);
 }
 
 ExternalCommand::ExternalCommand(const char* cmd_line): Command(cmd_line) {}
@@ -405,6 +403,55 @@ void RedirectionCommand::cleanup() {
   }
 }
 
+////////////////////////////////************************** Pipe implementation
+
+PipeCommand::PipeCommand(const char* cmd_line): Command(cmd_line), is_err(false) {
+  std::size_t pipe_index = original_line.find_first_of("|");
+  if(this->original_line.size() < (pipe_index + 2)) {       //check valid input
+    std::cerr << "smash error:> \"" << this->getOriginalLine() << "\"";
+    return;
+  }
+  this->first_cmd = original_line.substr(0, pipe_index);
+  if(this->original_line[pipe_index+1] == '&') {    // check for |& pipe
+    this->is_err = true;
+    this->second_cmd = original_line.substr(pipe_index+2);
+  }
+  else {
+    this->second_cmd = original_line.substr(pipe_index+1);
+  }
+  if(pipe(this->pipe_arr) == SYSCALL_FAIL) {
+    perror("smash error: pipe failed");
+  }
+}
+
+void PipeCommand::execute() {
+  int output = 1;
+  pid_t first_cmd_child = fork();
+  if(first_cmd_child == 0) {  // first child
+    if(is_err) output = 2;
+    if(dup2(this->pipe_arr[1], output) == SYSCALL_FAIL) {
+      perror("smash error: dup2 failed");
+    }
+    if(close(this->pipe_arr[0]) == SYSCALL_FAIL) {
+      perror("smash error: close failed");
+    }
+    if(close(this->pipe_arr[1]) == SYSCALL_FAIL) {
+      perror("smash error: close failed");
+    }
+    SmallShell::getInstance().executeCommand(this->first_cmd.c_str());
+  }
+  else if(first_cmd_child == SYSCALL_FAIL) {
+    perror("smash error: fork failed");
+  }
+
+  // close father fd for pipe
+  if(close(this->pipe_arr[0]) == SYSCALL_FAIL) {
+    perror("smash error: close failed");
+  }
+  if(close(this->pipe_arr[1]) == SYSCALL_FAIL) {
+    perror("smash error: close failed");
+  }
+}
 
 ////////////////////////////////************************** jobs implementation
 

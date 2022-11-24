@@ -47,7 +47,10 @@ class ExternalCommand : public Command {
 };
 
 class PipeCommand : public Command {
-  // TODO: Add your data members
+  int pipe_arr[2];
+  std::string first_cmd;
+  std::string second_cmd;
+  bool is_err;
  public:
   PipeCommand(const char* cmd_line);
   virtual ~PipeCommand() {}
