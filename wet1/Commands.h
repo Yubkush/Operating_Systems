@@ -121,7 +121,9 @@ class JobsList {
     bool is_stopped;
     Command* cmd;
     public:
-      JobEntry(Command* cmd, pid_t pid, bool is_stopped): cmd(cmd), pid(pid), is_stopped(is_stopped) {
+      JobEntry(Command* cmd, pid_t pid, bool is_stopped): is_stopped(is_stopped) {
+        this->cmd = cmd;
+        this->pid = pid;
         time_created = time(nullptr);
       }
       ~JobEntry() = default;
