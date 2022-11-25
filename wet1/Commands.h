@@ -5,6 +5,8 @@
 #include <string>
 #include <map>
 #include <fcntl.h>
+#include <sched.h>
+#include <thread>
 
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)

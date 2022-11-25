@@ -118,7 +118,7 @@ ChangeDirCommand::ChangeDirCommand(const char* cmd_line, std::string& last_pwd) 
 
 void ChangeDirCommand::execute () {
   if(this->args.size() > 2){
-    perror("smash error: cd: too many arguments");
+    std::cerr << "smash error: cd: too many arguments" << std::endl;
     return;
   }
   if(this->args.size() == 1){
@@ -134,7 +134,7 @@ void ChangeDirCommand::execute () {
   // if we get input - move to last dir
   if ((this->args[1]).compare("-") == 0) {
     if((this->last_pwd).compare("") == 0){
-      perror("smash error: cd: OLDPWD not set");
+      std::cerr << "smash error: cd: OLDPWD not set" << std::endl;
       return;
     }
     res = chdir((this->last_pwd).c_str());
@@ -226,7 +226,7 @@ static bool is_number(const std::string& s)
 
 void ForegroundCommand::execute() {
   if(this->args.size() > 2 || (this->args.size() == 2 && !is_number(this->args[1]))){
-    perror("smash error: fg: invalid arguments");
+    std::cerr << "smash error: fg: invalid arguments" << std::endl;
     return;
   }
   try{
@@ -260,10 +260,10 @@ void ForegroundCommand::execute() {
     SmallShell::getInstance().setForegroundProcess(nullptr);
   }
   catch(JobsList::EmptyList& e){
-    perror("smash error: fg: jobs list is empty");
+    std::cerr << "smash error: fg: jobs list is empty" << std::endl;
   }
   catch(JobsList::JobIdMissing& e) {
-    fprintf(stderr, "smash error: fg: job-id %d does not exist\n", std::stoi(this->args[1]));
+    std::cerr << "smash error: fg: job-id " << std::stoi(this->args[1]) << " does not exist" << std::endl;
   }
 }
 
@@ -271,7 +271,7 @@ BackgroundCommand::BackgroundCommand(const char* cmd_line, JobsList& jobs): Buil
 
 void BackgroundCommand::execute() {
   if(this->args.size() > 2 || (this->args.size() == 2 && !is_number(this->args[1]))){
-    perror("smash error: bg: invalid arguments");
+    std::cerr << "smash error: bg: invalid arguments" << std::endl;
     return;
   }
   try{
@@ -286,7 +286,7 @@ void BackgroundCommand::execute() {
       job = jobs.getJobById(job_id);
     }
     if(!job.getIsStopped()){
-      fprintf(stderr, "smash error: bg: job-id %d is already running in the background\n", job_id);
+      std::cerr << "smash error: bg: job-id " << job_id << " is already running in the background" << std::endl;
       return;
     }
     pid_t pid = job.getJobPid();
@@ -297,10 +297,10 @@ void BackgroundCommand::execute() {
     }
   }
   catch(const JobsList::NoStoppedJob& e){
-    perror("smash error: bg: there is no stopped jobs to resume");
+    std::cerr << "smash error: bg: there is no stopped jobs to resume" << std::endl;
   }
   catch(const JobsList::JobIdMissing& e) {
-    fprintf(stderr, "smash error: bg: job-id %d does not exist\n", std::stoi(this->args[1]));
+    std::cerr << "smash error: bg: job-id " << std::stoi(this->args[1]) << " does not exist" << std::endl;
   }
 }
 
@@ -320,8 +320,10 @@ void KillCommand::execute() {
   if(this->args.size() != 3 || 
     this->args[1][0] != '-' ||
     !is_number(kill_str) ||
-    !is_number(this->args[2])) {
-      perror("smash error: kill: invalid arguments");
+    !is_number(this->args[2]) ||
+    std::stoi(kill_str) < 1 || 
+    std::stoi(kill_str) > 31) {
+      std::cerr << "smash error: kill: invalid arguments" << std::endl;
       return;
   }
   try {
@@ -340,7 +342,36 @@ void KillCommand::execute() {
     std::cout << "signal number " << kill_num << " was sent to pid " << job.getJobPid() << std::endl;
   }
   catch(JobsList::JobIdMissing& e) {
-    fprintf(stderr, "smash error: kill: job-id %d does not exist", std::stoi(this->args[2]));
+    std::cerr << "smash error: kill: job-id" << std::stoi(this->args[2]) << "does not exist" << std::endl;
+  }
+}
+
+SetcoreCommand::SetcoreCommand(const char* cmd_line): BuiltInCommand(cmd_line) {}
+
+void SetcoreCommand::execute() {
+  if(this->args.size() != 3 ||  // check for valid arguments
+    !is_number(this->args[1]) ||
+    !is_number(this->args[2])) {
+      std::cerr << "smash error: setcore: invalid arguments" << std::endl;
+      return;
+  }
+  try{
+    JobsList::JobEntry& job = SmallShell::getInstance().getJobsList().getJobById(std::stoi(this->args[1]));
+    int core = std::stoi(this->args[2]);
+    const auto processor_count = std::thread::hardware_concurrency(); // find number of cpu's
+    if(core < 0 || core >= processor_count) {
+      std::cerr << "smash error: setcore: invalid core number" << std::endl;
+      return;
+    }
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    CPU_SET(core, &set);
+    if(sched_setaffinity(job.getJobPid(), sizeof(set), &set) == -1) {
+      perror("smash error: sched_setaffinity failed");
+    }
+  }
+  catch(const JobsList::JobIdMissing& e) {
+    std::cerr << "smash error: setcore: job-id " << std::stoi(this->args[1]) << " does not exist" << std::endl;
   }
 }
 
@@ -425,9 +456,14 @@ PipeCommand::PipeCommand(const char* cmd_line): Command(cmd_line), is_err(false)
 }
 
 void PipeCommand::execute() {
+  SmallShell& smash = SmallShell::getInstance();
   int output = 1;
-  pid_t first_cmd_child = fork();
-  if(first_cmd_child == 0) {  // first child
+  pid_t first_cmd_child = fork(); // first child
+  if(first_cmd_child == 0) {
+    if(setpgrp() == SYSCALL_FAIL){
+      perror("smash error: setpgrp failed");
+      return;
+    }
     if(is_err) output = 2;
     if(dup2(this->pipe_arr[1], output) == SYSCALL_FAIL) {
       perror("smash error: dup2 failed");
@@ -438,18 +474,51 @@ void PipeCommand::execute() {
     if(close(this->pipe_arr[1]) == SYSCALL_FAIL) {
       perror("smash error: close failed");
     }
-    SmallShell::getInstance().executeCommand(this->first_cmd.c_str());
+    smash.executeCommand(this->first_cmd.c_str());
+    exit(0);
   }
   else if(first_cmd_child == SYSCALL_FAIL) {
     perror("smash error: fork failed");
+    return;
   }
-
-  // close father fd for pipe
-  if(close(this->pipe_arr[0]) == SYSCALL_FAIL) {
-    perror("smash error: close failed");
-  }
-  if(close(this->pipe_arr[1]) == SYSCALL_FAIL) {
-    perror("smash error: close failed");
+  else {
+    // second child
+    pid_t second_cmd_child = fork();
+    if(second_cmd_child == 0) {  
+      if(setpgrp() == SYSCALL_FAIL){
+        perror("smash error: setpgrp failed");
+        return;
+      }
+      if(dup2(this->pipe_arr[0], STDIN_FILENO) == SYSCALL_FAIL) {
+        perror("smash error: dup2 failed");
+      }
+      if(close(this->pipe_arr[0]) == SYSCALL_FAIL) {
+        perror("smash error: close failed");
+      }
+      if(close(this->pipe_arr[1]) == SYSCALL_FAIL) {
+        perror("smash error: close failed");
+      }
+      smash.executeCommand(this->second_cmd.c_str());
+      exit(0);
+    }
+    else if(second_cmd_child == SYSCALL_FAIL) {
+      perror("smash error: fork failed");
+    }
+    else {
+      // close father fd for pipe
+      if(close(this->pipe_arr[0]) == SYSCALL_FAIL) {
+        perror("smash error: close failed");
+      }
+      if(close(this->pipe_arr[1]) == SYSCALL_FAIL) {
+        perror("smash error: close failed");
+      }
+      if(waitpid(first_cmd_child, nullptr, WUNTRACED) == SYSCALL_FAIL){
+        perror("smash error: waitpid failed");
+      }
+      if(waitpid(second_cmd_child, nullptr, WUNTRACED) == SYSCALL_FAIL){
+        perror("smash error: waitpid failed");
+      }
+    }
   }
 }
 
@@ -462,8 +531,8 @@ void JobsList::removeFinishedJobs() {
     return;
   }
   for(auto it = this->job_map.begin(); it != this->job_map.end(); ) {
-    pid_t result = waitpid(it->second.getJobPid(), nullptr, WNOHANG);
-    if(result > 0 || result == SYSCALL_FAIL) {
+    pid_t result = waitpid(it->second.getJobPid(), nullptr, WNOHANG);  // when child from pipe command run waitpid its fails and erase all jobs
+    if(result > 0) {
       it = this->job_map.erase(it);
     }
     else {
@@ -567,6 +636,9 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   if(args.size() > 1 && (args[args.size()-2].compare(">") == 0 || args[args.size()-2].compare(">>") == 0)){
     return new RedirectionCommand(cmd_line);
   }
+  else if(cmd_s.find_first_of("|") != string::npos) {
+    return new PipeCommand(cmd_line);
+  }
   else if (firstWord.compare("chprompt") == 0) {
     return new ChangePromptCommand(cmd_line);
   }
@@ -576,11 +648,14 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   else if(firstWord.compare("pwd") == 0) {
     return new GetCurrDirCommand(cmd_line);
   }
-  else if(firstWord.compare("cd") == 0) {
-    return new ChangeDirCommand(cmd_line, this->last_pwd);
-  }
   else if(firstWord.compare("jobs") == 0) {
     return new JobsCommand(cmd_line, SmallShell::getInstance().getJobsList());
+  }
+  else if(firstWord.compare("quit") == 0) {
+    return new QuitCommand(cmd_line, SmallShell::getInstance().getJobsList());
+  }
+  else if(firstWord.compare("cd") == 0) {
+    return new ChangeDirCommand(cmd_line, this->last_pwd);
   }
   else if(firstWord.compare("kill") == 0) {
     return new KillCommand(cmd_line, SmallShell::getInstance().getJobsList());
@@ -591,8 +666,8 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   else if(firstWord.compare("bg") == 0) {
     return new BackgroundCommand(cmd_line, SmallShell::getInstance().getJobsList());
   }
-  else if(firstWord.compare("quit") == 0) {
-    return new QuitCommand(cmd_line, SmallShell::getInstance().getJobsList());
+  else if(firstWord.compare("setcore") == 0) {
+    return new SetcoreCommand(cmd_line);
   }
   else {
     return new ExternalCommand(cmd_line);
