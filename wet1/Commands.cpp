@@ -355,13 +355,12 @@ void SetcoreCommand::execute() {
       std::cerr << "smash error: setcore: invalid core number" << std::endl;
       return;
     }
-    cpu_set_t set;
+    cpu_set_t& set = job.getAffinityMask();
     CPU_ZERO(&set);
     CPU_SET(core, &set);
-    if(sched_setaffinity(job.getJobPid(), sizeof(set), &set) == -1) {
+    if(sched_setaffinity(job.getJobPid(), sizeof(cpu_set_t), &set) == -1) {
       perror("smash error: sched_setaffinity failed");
     }
-    // print_affinity(job.getJobPid());
   }
   catch(const JobsList::JobIdMissing& e) {
     std::cerr << "smash error: setcore: job-id " << std::stoi(this->args[1]) << " does not exist" << std::endl;
