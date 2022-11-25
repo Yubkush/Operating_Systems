@@ -9,7 +9,7 @@
 #include <limits.h>
 #include <sys/types.h>
 #include <time.h>
-#include <algorithm>
+#include <errno.h>
 
 using namespace std;
 
@@ -346,6 +346,21 @@ void KillCommand::execute() {
   }
 }
 
+static void print_affinity(int p) {
+    cpu_set_t mask;
+    long nproc, i;
+
+    if (sched_getaffinity(p, sizeof(cpu_set_t), &mask) == -1) {
+        perror("sched_getaffinity");
+    }
+    nproc = sysconf(_SC_NPROCESSORS_ONLN);
+    printf("sched_getaffinity = ");
+    for (i = 0; i < nproc; i++) {
+        printf("%d ", CPU_ISSET(i, &mask));
+    }
+    printf("\n");
+}
+
 SetcoreCommand::SetcoreCommand(const char* cmd_line): BuiltInCommand(cmd_line) {}
 
 void SetcoreCommand::execute() {
@@ -366,9 +381,10 @@ void SetcoreCommand::execute() {
     cpu_set_t set;
     CPU_ZERO(&set);
     CPU_SET(core, &set);
-    if(sched_setaffinity(job.getJobPid(), sizeof(set), &set) == -1) {
+    if(sched_setaffinity(job.getJobPid(), sizeof(cpu_set_t), &set) == -1) {
       perror("smash error: sched_setaffinity failed");
     }
+    print_affinity(job.getJobPid());
   }
   catch(const JobsList::JobIdMissing& e) {
     std::cerr << "smash error: setcore: job-id " << std::stoi(this->args[1]) << " does not exist" << std::endl;
