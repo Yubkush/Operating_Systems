@@ -120,15 +120,11 @@ class JobsList {
     time_t time_created;
     bool is_stopped;
     Command* cmd;
-    cpu_set_t mask;
     public:
       JobEntry(Command* cmd, pid_t pid, bool is_stopped): is_stopped(is_stopped) {
         this->cmd = cmd;
         this->pid = pid;
         time_created = time(nullptr);
-        if(sched_getaffinity(pid, sizeof(cpu_set_t), &mask)) {
-          perror("smash error: sched_getaffinity failed");
-        }
       }
       ~JobEntry() = default;
       pid_t getJobPid() {return pid;}
@@ -136,7 +132,6 @@ class JobsList {
       Command* getCommand() {return cmd;}
       bool getIsStopped() {return is_stopped;}
       void setStopped(bool x) {this->is_stopped = x;}
-      cpu_set_t& getAffinityMask() {return this->mask;}
   };
  std::map<jid, JobEntry> job_map;
  
