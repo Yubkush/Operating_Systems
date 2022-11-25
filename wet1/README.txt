@@ -27,11 +27,11 @@ To implement new commands, you need to:
 
 We recommend that you start your implementation with:
 V the simple built-in commands (e.g., chprompt/pwd/showpid/cd/...), after making sure that they work fine with no bugs, then move forward
-- implement the rest of the built-in commands 
+V implement the rest of the built-in commands 
 V implement the external commands
 V implement the execution of external commands in the background
 V implement the jobs list and all relevant commands (fg/bg/jobs/...) 
-- implement the I/O redirection and the pipes
-- Finally implement the bonus command.
+V implement the I/O redirection and the pipes
+V Finally implement the bonus command.
 
 Good luck :)

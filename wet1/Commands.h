@@ -7,6 +7,8 @@
 #include <fcntl.h>
 #include <sched.h>
 #include <thread>
+#include <fstream>
+#include <regex>
 
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)

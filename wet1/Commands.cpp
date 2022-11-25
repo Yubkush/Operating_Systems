@@ -166,15 +166,7 @@ void ExternalCommand::execute(){
       }
       command_args.push_back(nullptr);
       
-      if(execv(command_args[0], const_cast<char* const*>(command_args.data())) == SYSCALL_FAIL){
-        std::vector<const char*> bin_args;
-        bin_args.push_back((std::string("/bin/") + this->args[0]).c_str());
-        for(int i = 1; i < this->args.size(); ++i) {
-          bin_args.push_back(this->args[i].c_str());
-        }
-        bin_args.push_back(nullptr);
-        execv(bin_args[0], const_cast<char* const*>(bin_args.data()));
-      }
+      execvp(command_args[0], const_cast<char* const*>(command_args.data()));
       perror("smash error: execv failed");
       exit(EXIT_FAILURE);
     }
@@ -346,21 +338,6 @@ void KillCommand::execute() {
   }
 }
 
-static void print_affinity(int p) {
-    cpu_set_t mask;
-    long nproc, i;
-
-    if (sched_getaffinity(p, sizeof(cpu_set_t), &mask) == -1) {
-        perror("sched_getaffinity");
-    }
-    nproc = sysconf(_SC_NPROCESSORS_ONLN);
-    printf("sched_getaffinity = ");
-    for (i = 0; i < nproc; i++) {
-        printf("%d ", CPU_ISSET(i, &mask));
-    }
-    printf("\n");
-}
-
 SetcoreCommand::SetcoreCommand(const char* cmd_line): BuiltInCommand(cmd_line) {}
 
 void SetcoreCommand::execute() {
@@ -381,13 +358,67 @@ void SetcoreCommand::execute() {
     cpu_set_t set;
     CPU_ZERO(&set);
     CPU_SET(core, &set);
-    if(sched_setaffinity(job.getJobPid(), sizeof(cpu_set_t), &set) == -1) {
+    if(sched_setaffinity(job.getJobPid(), sizeof(set), &set) == -1) {
       perror("smash error: sched_setaffinity failed");
     }
-    print_affinity(job.getJobPid());
+    // print_affinity(job.getJobPid());
   }
   catch(const JobsList::JobIdMissing& e) {
     std::cerr << "smash error: setcore: job-id " << std::stoi(this->args[1]) << " does not exist" << std::endl;
+  }
+}
+
+static int countSubstring(std::string& substring, std::string& contents) {
+  int occurrences = 0;
+   std::string::size_type pos = 0;
+   while ((pos = contents.find(substring, pos )) != std::string::npos) {
+          ++ occurrences;
+          pos += substring.length();
+   }
+   return occurrences;
+}
+
+FareCommand::FareCommand(const char* cmd_line): BuiltInCommand(cmd_line) {}
+
+void FareCommand::execute() {
+  if(this->args.size() != 4) { // check for valid arguments
+      std::cerr << "smash error: fare: invalid arguments" << std::endl;
+      return;
+  }
+  std::fstream file(this->args[1], std::fstream::out | std::fstream::in);
+  if(!file){
+    perror("smash error: open failed");
+    return;
+  }
+  std::stringstream strStream;
+  try { strStream << file.rdbuf(); }
+  catch(...) {
+    perror("smash error: read failed");
+    return;
+  }
+  try { file.close(); }
+  catch(...) {
+    perror("smash error: close failed");
+    return;
+  }
+  std::string contents = strStream.str();
+  int counter = countSubstring(this->args[2], contents);
+  std::string updated_contents = std::regex_replace(contents, std::regex(this->args[2]), this->args[3]);
+  try { file.open(this->args[1], std::fstream::out | std::fstream::in | std::fstream::trunc); }
+  catch(...) {
+    perror("smash error: close failed");
+    return;
+  }
+  try { file << updated_contents; }
+  catch(...) {
+    perror("smash error: write failed");
+    return;
+  }
+  std::cout << "replaced " << counter << " instances of the string \"" << this->args[2] << "\"" << std::endl;
+  try { file.close(); }
+  catch(...) {
+    perror("smash error: close failed");
+    return;
   }
 }
 
@@ -639,9 +670,7 @@ SmallShell::~SmallShell() {
 // TODO: add your implementation
 }
 
-/**
-* Creates and returns a pointer to Command class which matches the given command line (cmd_line)
-*/
+
 Command * SmallShell::CreateCommand(const char* cmd_line) {
   string cmd_s = _trim(string(cmd_line));
   string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
@@ -681,6 +710,9 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   }
   else if(firstWord.compare("bg") == 0) {
     return new BackgroundCommand(cmd_line, SmallShell::getInstance().getJobsList());
+  }
+  else if(firstWord.compare("fare") == 0) {
+    return new FareCommand(cmd_line);
   }
   else if(firstWord.compare("setcore") == 0) {
     return new SetcoreCommand(cmd_line);
