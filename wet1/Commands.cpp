@@ -361,7 +361,22 @@ void SetcoreCommand::execute() {
     if(sched_setaffinity(job.getJobPid(), sizeof(set), &set) == -1) {
       perror("smash error: sched_setaffinity failed");
     }
-    // print_affinity(job.getJobPid());
+    if(job.getIsStopped()) {
+      if(kill(job.getJobPid(), SIGCONT) < 0) {
+        perror("smash error: kill failed");
+      }
+      if(kill(job.getJobPid(), SIGTSTP) < 0) {
+        perror("smash error: kill failed");
+      }
+    }
+    else{
+      if(kill(job.getJobPid(), SIGTSTP) < 0) {
+        perror("smash error: kill failed");
+      }
+      if(kill(job.getJobPid(), SIGCONT) < 0) {
+        perror("smash error: kill failed");
+      }
+    }
   }
   catch(const JobsList::JobIdMissing& e) {
     std::cerr << "smash error: setcore: job-id " << std::stoi(this->args[1]) << " does not exist" << std::endl;
