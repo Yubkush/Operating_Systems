@@ -23,6 +23,7 @@ class Command {
   std::string line;
   std::string original_line;
   bool is_bg;
+  jid job_id;
  public:
   Command(const char* cmd_line);
   virtual ~Command() = default;
@@ -32,6 +33,8 @@ class Command {
   // void setLine(std::string& line) { this->line = line;}
   void setOriginalLine(std::string& original_line) { this->original_line = original_line;}
   bool getIsBg() {return this->is_bg;}
+  jid getJobId() {return this->job_id;}
+  void setJobId(jid job_id) {this->job_id = job_id;}
   virtual void prepare(){}
   virtual void cleanup(){}
   // TODO: Add your extra methods if needed

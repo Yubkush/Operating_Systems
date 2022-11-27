@@ -76,7 +76,7 @@ void _removeBackgroundSign(string& cmd_line) {
 }
 
 // TODO: Add your implementation for classes in Commands.h 
-Command::Command(const char* cmd_line): line(cmd_line), is_bg(false), original_line(cmd_line) {
+Command::Command(const char* cmd_line): line(cmd_line), is_bg(false), original_line(cmd_line), job_id(0) {
   if(_isBackgroundComamnd(cmd_line)) {
     is_bg = true;
   }
@@ -237,6 +237,7 @@ void ForegroundCommand::execute() {
       perror("smash error: kill failed");
       return;
     }
+    this->job_id = job_id;
     jobs.removeJobById(job_id); // remove fg process from job list
     SmallShell::getInstance().setForegroundProcess(this); // update small shell fg fields
     SmallShell::getInstance().setFgPid(pid);
@@ -593,10 +594,15 @@ void JobsList::addJob(Command* cmd, pid_t pid, bool isStopped) {
     this->job_map.insert(std::make_pair(1, JobsList::JobEntry(cmd, pid, isStopped)));
   }
   else {
-    this->job_map.insert(std::make_pair(
-      (this->job_map.rbegin()->first)+1,
-      JobsList::JobEntry(cmd, pid, isStopped)
-    ));
+    if(cmd->getJobId() !=0) {
+      this->job_map.insert(std::make_pair(cmd->getJobId(), JobsList::JobEntry(cmd, pid, isStopped)));
+    }
+    else{
+      this->job_map.insert(std::make_pair(
+        (this->job_map.rbegin()->first)+1,
+        JobsList::JobEntry(cmd, pid, isStopped)
+      ));
+    }
   }
 }
 
@@ -636,7 +642,8 @@ void JobsList::removeJobById(jid jobId) {
   if(it == this->job_map.end()){
     throw(JobIdMissing());
   }
-  this->job_map.erase(this->job_map.find(jobId));
+  it->second.getCommand()->setJobId(jobId);
+  this->job_map.erase(it);
 }
 
 JobsList::JobEntry& JobsList::getLastJob(jid* lastJobId) {
