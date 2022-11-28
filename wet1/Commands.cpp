@@ -76,7 +76,7 @@ void _removeBackgroundSign(string& cmd_line) {
 }
 
 // TODO: Add your implementation for classes in Commands.h 
-Command::Command(const char* cmd_line): line(cmd_line), is_bg(false), original_line(cmd_line), job_id(0) {
+Command::Command(const char* cmd_line): line(cmd_line), original_line(cmd_line), is_bg(false) , job_id(0) {
   if(_isBackgroundComamnd(cmd_line)) {
     is_bg = true;
   }
@@ -167,7 +167,7 @@ void ExternalCommand::execute(){
       command_args.push_back(nullptr);
       
       execvp(command_args[0], const_cast<char* const*>(command_args.data()));
-      perror("smash error: execv failed");
+      perror("smash error: execvp failed");
       exit(EXIT_FAILURE);
     }
     // Complex external
@@ -212,6 +212,7 @@ ForegroundCommand::ForegroundCommand(const char* cmd_line, JobsList& jobs): Buil
 static bool is_number(const std::string& s)
 {
     std::string::const_iterator it = s.begin();
+    if(*it == '-') ++it;
     while (it != s.end() && std::isdigit(*it)) ++it;
     return !s.empty() && it == s.end();
 }
@@ -309,13 +310,12 @@ void QuitCommand::execute() {
 KillCommand::KillCommand(const char* cmd_line, JobsList& jobs): BuiltInCommand(cmd_line), jobs(jobs) {}
 
 void KillCommand::execute() {
+  if(this->args.size() != 3 || this->args[1][0] != '-') {
+    std::cerr << "smash error: kill: invalid arguments" << std::endl;
+    return;
+  }
   std::string kill_str = this->args[1].substr(1); // get signal number
-  if(this->args.size() != 3 || 
-    this->args[1][0] != '-' ||
-    !is_number(kill_str) ||
-    !is_number(this->args[2]) ||
-    std::stoi(kill_str) < 1 || 
-    std::stoi(kill_str) > 31) {
+  if(!is_number(kill_str) || !is_number(this->args[2])) {
       std::cerr << "smash error: kill: invalid arguments" << std::endl;
       return;
   }
@@ -335,7 +335,7 @@ void KillCommand::execute() {
     std::cout << "signal number " << kill_num << " was sent to pid " << job.getJobPid() << std::endl;
   }
   catch(JobsList::JobIdMissing& e) {
-    std::cerr << "smash error: kill: job-id" << std::stoi(this->args[2]) << "does not exist" << std::endl;
+    std::cerr << "smash error: kill: job-id " << std::stoi(this->args[2]) << " does not exist" << std::endl;
   }
 }
 
@@ -352,7 +352,7 @@ void SetcoreCommand::execute() {
     JobsList::JobEntry& job = SmallShell::getInstance().getJobsList().getJobById(std::stoi(this->args[1]));
     int core = std::stoi(this->args[2]);
     const auto processor_count = std::thread::hardware_concurrency(); // find number of cpu's
-    if(core < 0 || core >= processor_count) {
+    if(core < 0 || core >= (int)processor_count) {
       std::cerr << "smash error: setcore: invalid core number" << std::endl;
       return;
     }
@@ -609,12 +609,12 @@ void JobsList::addJob(Command* cmd, pid_t pid, bool isStopped) {
 void JobsList::printJobsList() {
   removeFinishedJobs();
   for(auto& job: this->job_map) {
-    std::cout << "[" << job.first << "]" << job.second.getCommand()->getOriginalLine();
+    std::cout << "[" << job.first << "] " << job.second.getCommand()->getOriginalLine();
     std::cout << " : " << job.second.getJobPid() << " "
-    << difftime(time(nullptr), job.second.getTimeCreated()) << " secs ";
+    << difftime(time(nullptr), job.second.getTimeCreated()) << " secs";
 
     if(job.second.getIsStopped()){
-      std::cout << "(stopped)";
+      std::cout << " (stopped)";
     }
     std::cout << endl;
   }
@@ -667,7 +667,7 @@ JobsList::JobEntry& JobsList::getLastStoppedJob(jid *jobId) {
 
 ////////////////////////////////************************** smash implementation
 
-SmallShell::SmallShell(): prompt("smash"), last_pwd(""), fg_pid(NO_FOREGROUND), jobs_list(), foreground_process(nullptr)
+SmallShell::SmallShell(): prompt("smash"), last_pwd(""), foreground_process(nullptr), fg_pid(NO_FOREGROUND), jobs_list()
 {
 // TODO: add your implementation
 }
@@ -679,6 +679,9 @@ SmallShell::~SmallShell() {
 
 Command * SmallShell::CreateCommand(const char* cmd_line) {
   string cmd_s = _trim(string(cmd_line));
+  if(cmd_s.compare("") == 0){
+    return nullptr;
+  }
   string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
   _removeBackgroundSign(firstWord);
   std::vector<std::string> args;
@@ -734,6 +737,8 @@ void SmallShell::executeCommand(const char *cmd_line) {
   // for example:
   this->jobs_list.removeFinishedJobs();
   Command* cmd = CreateCommand(cmd_line);
-  cmd->execute();
+  if(cmd){
+    cmd->execute();
+  }
   // Please note that you must fork smash process for some commands (e.g., external commands....)
 }
