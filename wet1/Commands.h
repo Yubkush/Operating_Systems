@@ -69,6 +69,7 @@ class RedirectionCommand : public Command {
   bool append;
   int stdout_copy;
   int file_fd;
+  std::string cmd;
  public:
   explicit RedirectionCommand(const char* cmd_line);
   virtual ~RedirectionCommand() {}

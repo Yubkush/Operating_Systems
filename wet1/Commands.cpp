@@ -424,11 +424,15 @@ void FareCommand::execute() {
 
 ////////////////////////////////************************** Redirection implementation
 
-RedirectionCommand::RedirectionCommand(const char* cmd_line): Command(cmd_line), stdout_copy(STDOUT_FILENO), file_fd(-1){
-  this->file_name = this->args.back();
-  this->args.pop_back();
-  this->append = this->args.back().compare(">>") == 0;
-  this->args.pop_back();
+RedirectionCommand::RedirectionCommand(const char* cmd_line): Command(cmd_line), append(false), stdout_copy(STDOUT_FILENO), file_fd(-1), cmd(""){
+  std::size_t seperator = line.find_first_of(">");
+  std::size_t second = seperator + 1;
+  if(line.find(">>") != std::string::npos) {
+    this->append = true;
+    second += 1;
+  }
+  this->cmd = line.substr(0, seperator);
+  this->file_name = _trim(line.substr(second));
   
   this->prepare();
 }
@@ -456,12 +460,7 @@ void RedirectionCommand::prepare() {
 
 void RedirectionCommand::execute() {
   if(this->file_fd != SYSCALL_FAIL) {
-    std::string cmd_line = "";
-    for(auto& arg: this->args) {
-      cmd_line += arg + " ";
-    }
-    cmd_line.pop_back();
-    SmallShell::getInstance().executeCommand(cmd_line.c_str());
+    SmallShell::getInstance().executeCommand(this->cmd.c_str());
   }
   cleanup();
 }
@@ -687,7 +686,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   std::vector<std::string> args;
   _parseCommandLine(cmd_line, args);
   
-  if(args.size() > 1 && (args[args.size()-2].compare(">") == 0 || args[args.size()-2].compare(">>") == 0)){
+  if(cmd_s.find_first_of(">") != string::npos){
     return new RedirectionCommand(cmd_line);
   }
   else if(cmd_s.find_first_of("|") != string::npos) {
