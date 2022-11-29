@@ -459,16 +459,18 @@ void RedirectionCommand::prepare() {
 }
 
 void RedirectionCommand::execute() {
-  if(this->file_fd != SYSCALL_FAIL) {
+  if(this->file_fd != SYSCALL_FAIL && this->stdout_copy != SYSCALL_FAIL) {
     SmallShell::getInstance().executeCommand(this->cmd.c_str());
   }
   cleanup();
 }
 
 void RedirectionCommand::cleanup() {
-  if(close(this->file_fd) == SYSCALL_FAIL){
-    perror("smash error: close failed");
-    return;
+  if((this->file_fd) != SYSCALL_FAIL) {
+    if(close(this->file_fd) == SYSCALL_FAIL){
+          perror("smash error: close failed");
+          return;
+        }
   }
   if(dup2(this->stdout_copy, STDOUT_FILENO) == SYSCALL_FAIL) {
     perror("smash error: dup2 failed");
