@@ -610,7 +610,7 @@ void JobsList::addJob(Command* cmd, pid_t pid, bool isStopped) {
 void JobsList::printJobsList() {
   removeFinishedJobs();
   for(auto& job: this->job_map) {
-    std::cout << "[" << job.first << "] " << job.second.getCommand()->getOriginalLine();
+    std::cout << "[" << job.first << "]" << job.second.getCommand()->getOriginalLine();
     std::cout << " : " << job.second.getJobPid() << " "
     << difftime(time(nullptr), job.second.getTimeCreated()) << " secs";
 
