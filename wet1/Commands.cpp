@@ -380,6 +380,13 @@ static int countSubstring(std::string& substring, std::string& contents) {
 
 FareCommand::FareCommand(const char* cmd_line): BuiltInCommand(cmd_line) {}
 
+void FareCommand::evacuate(int fd, std::string& contents) {
+  close(fd);
+  fd = open(this->args[1].c_str(), O_RDWR|O_TRUNC);
+  write(fd, contents.c_str(), contents.size());
+  close(fd);
+}
+
 void FareCommand::execute() {
   if(this->args.size() != 4) { // check for valid arguments
       std::cerr << "smash error: fare: invalid arguments" << std::endl;
@@ -404,22 +411,31 @@ void FareCommand::execute() {
   std::string contents = strStream.str();
   int counter = countSubstring(this->args[2], contents);
   std::string updated_contents = std::regex_replace(contents, std::regex(this->args[2]), this->args[3]);
-  try { file.open(this->args[1], std::fstream::out | std::fstream::in | std::fstream::trunc); }
-  catch(...) {
-    perror("smash error: close failed");
+  int fd = open(this->args[1].c_str(), O_RDWR|O_TRUNC);
+  if(fd == SYSCALL_FAIL) {
+    perror("smash error: open failed");
     return;
   }
-  try { file << updated_contents; }
-  catch(...) {
+  struct rlimit lim;
+  if(getrlimit(RLIMIT_FSIZE, &lim) == -1){
+    perror("smash error: getrlimit failed");
+    this->evacuate(fd, contents);
+    return;
+  }
+  if(lim.rlim_cur < updated_contents.size()) {
+    this->evacuate(fd, contents);
+    return;
+  }
+  if(write(fd, updated_contents.c_str(), updated_contents.size()) == SYSCALL_FAIL) {
     perror("smash error: write failed");
+    this->evacuate(fd, contents);
+    return;
+  }
+  if(close(fd) == SYSCALL_FAIL) {
+    perror("smash error: close failed");
     return;
   }
   std::cout << "replaced " << counter << " instances of the string \"" << this->args[2] << "\"" << std::endl;
-  try { file.close(); }
-  catch(...) {
-    perror("smash error: close failed");
-    return;
-  }
 }
 
 ////////////////////////////////************************** Redirection implementation

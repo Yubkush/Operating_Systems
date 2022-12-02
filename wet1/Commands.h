@@ -6,6 +6,7 @@
 #include <map>
 #include <fcntl.h>
 #include <sched.h>
+#include <sys/resource.h>
 #include <thread>
 #include <fstream>
 #include <regex>
@@ -197,6 +198,7 @@ class FareCommand : public BuiltInCommand {
   FareCommand(const char* cmd_line);
   virtual ~FareCommand() {}
   void execute() override;
+  void evacuate(int fd, std::string& contents);
 };
 
 class SetcoreCommand : public BuiltInCommand {
