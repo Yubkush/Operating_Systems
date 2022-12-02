@@ -426,7 +426,8 @@ void FareCommand::execute() {
     this->evacuate(fd, contents);
     return;
   }
-  if(write(fd, updated_contents.c_str(), updated_contents.size()) == SYSCALL_FAIL) {
+  ssize_t res_write = write(fd, updated_contents.c_str(), updated_contents.size());
+  if(res_write == SYSCALL_FAIL || res_write < (long)updated_contents.size()) {
     perror("smash error: write failed");
     this->evacuate(fd, contents);
     return;
