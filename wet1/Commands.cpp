@@ -209,14 +209,6 @@ void JobsCommand::execute() {
 
 ForegroundCommand::ForegroundCommand(const char* cmd_line, JobsList& jobs): BuiltInCommand(cmd_line), jobs(jobs) {}
 
-// static bool is_number(const std::string& s)
-// {
-//     std::string::const_iterator it = s.begin();
-//     if(*it == '-') ++it;
-//     while (it != s.end() && std::isdigit(*it)) ++it;
-//     return !s.empty() && it == s.end();
-// }
-
 void ForegroundCommand::execute() {
   if(this->args.size() > 2){
     std::cerr << "smash error: fg: invalid arguments" << std::endl;
