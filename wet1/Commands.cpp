@@ -209,16 +209,16 @@ void JobsCommand::execute() {
 
 ForegroundCommand::ForegroundCommand(const char* cmd_line, JobsList& jobs): BuiltInCommand(cmd_line), jobs(jobs) {}
 
-static bool is_number(const std::string& s)
-{
-    std::string::const_iterator it = s.begin();
-    if(*it == '-') ++it;
-    while (it != s.end() && std::isdigit(*it)) ++it;
-    return !s.empty() && it == s.end();
-}
+// static bool is_number(const std::string& s)
+// {
+//     std::string::const_iterator it = s.begin();
+//     if(*it == '-') ++it;
+//     while (it != s.end() && std::isdigit(*it)) ++it;
+//     return !s.empty() && it == s.end();
+// }
 
 void ForegroundCommand::execute() {
-  if(this->args.size() > 2 || (this->args.size() == 2 && !is_number(this->args[1]))){
+  if(this->args.size() > 2){
     std::cerr << "smash error: fg: invalid arguments" << std::endl;
     return;
   }
@@ -253,6 +253,9 @@ void ForegroundCommand::execute() {
     SmallShell::getInstance().setFgPid(NO_FOREGROUND); // update small shell fg fields
     SmallShell::getInstance().setForegroundProcess(nullptr);
   }
+  catch(std::invalid_argument& e) {
+    std::cerr << "smash error: fg: invalid arguments" << std::endl;
+  }
   catch(JobsList::EmptyList& e){
     std::cerr << "smash error: fg: jobs list is empty" << std::endl;
   }
@@ -264,7 +267,7 @@ void ForegroundCommand::execute() {
 BackgroundCommand::BackgroundCommand(const char* cmd_line, JobsList& jobs): BuiltInCommand(cmd_line), jobs(jobs) {}
 
 void BackgroundCommand::execute() {
-  if(this->args.size() > 2 || (this->args.size() == 2 && !is_number(this->args[1]))){
+  if(this->args.size() > 2){
     std::cerr << "smash error: bg: invalid arguments" << std::endl;
     return;
   }
@@ -290,6 +293,9 @@ void BackgroundCommand::execute() {
       perror("smash error: kill failed");
     }
   }
+  catch(std::invalid_argument& e) {
+    std::cerr << "smash error: bg: invalid arguments" << std::endl;
+  }
   catch(const JobsList::NoStoppedJob& e){
     std::cerr << "smash error: bg: there is no stopped jobs to resume" << std::endl;
   }
@@ -310,17 +316,17 @@ void QuitCommand::execute() {
 KillCommand::KillCommand(const char* cmd_line, JobsList& jobs): BuiltInCommand(cmd_line), jobs(jobs) {}
 
 void KillCommand::execute() {
-  if(this->args.size() != 3 || this->args[1][0] != '-') {
+  if(this->args.size() != 3) {
     std::cerr << "smash error: kill: invalid arguments" << std::endl;
     return;
   }
-  std::string kill_str = this->args[1].substr(1); // get signal number
-  if(!is_number(kill_str) || !is_number(this->args[2])) {
-      std::cerr << "smash error: kill: invalid arguments" << std::endl;
-      return;
-  }
   try {
     JobsList::JobEntry& job = jobs.getJobById(std::stoi(this->args[2]));
+    if(this->args[1][0] != '-'){
+      std::cerr << "smash error: kill: invalid arguments" << std::endl;
+      return;
+    }
+    std::string kill_str = this->args[1].substr(1);
     int kill_num = std::stoi(kill_str);
     if(kill(job.getJobPid(), kill_num) == -1) {
       perror("smash error: kill failed");
@@ -334,6 +340,9 @@ void KillCommand::execute() {
     }
     std::cout << "signal number " << kill_num << " was sent to pid " << job.getJobPid() << std::endl;
   }
+  catch(std::invalid_argument& e) {
+    std::cerr << "smash error: kill: invalid arguments" << std::endl;
+  }
   catch(JobsList::JobIdMissing& e) {
     std::cerr << "smash error: kill: job-id " << std::stoi(this->args[2]) << " does not exist" << std::endl;
   }
@@ -342,17 +351,15 @@ void KillCommand::execute() {
 SetcoreCommand::SetcoreCommand(const char* cmd_line): BuiltInCommand(cmd_line) {}
 
 void SetcoreCommand::execute() {
-  if(this->args.size() != 3 ||  // check for valid arguments
-    !is_number(this->args[1]) ||
-    !is_number(this->args[2])) {
+  if(this->args.size() != 3) { // check for valid arguments
       std::cerr << "smash error: setcore: invalid arguments" << std::endl;
       return;
   }
   try{
     JobsList::JobEntry& job = SmallShell::getInstance().getJobsList().getJobById(std::stoi(this->args[1]));
-    int core = std::stoi(this->args[2]);
+    const unsigned int core = std::stoi(this->args[2]);
     const auto processor_count = std::thread::hardware_concurrency(); // find number of cpu's
-    if(core < 0 || core >= (int)processor_count) {
+    if(core < 0 || core >= processor_count) {
       std::cerr << "smash error: setcore: invalid core number" << std::endl;
       return;
     }
@@ -362,6 +369,9 @@ void SetcoreCommand::execute() {
     if(sched_setaffinity(job.getJobPid(), sizeof(set), &set) == -1) {
       perror("smash error: sched_setaffinity failed");
     }
+  }
+  catch(std::invalid_argument& e) {
+    std::cerr << "smash error: setcore: invalid arguments" << std::endl;
   }
   catch(const JobsList::JobIdMissing& e) {
     std::cerr << "smash error: setcore: job-id " << std::stoi(this->args[1]) << " does not exist" << std::endl;
@@ -427,10 +437,15 @@ void FareCommand::execute() {
     return;
   }
   ssize_t res_write = write(fd, updated_contents.c_str(), updated_contents.size());
-  if(res_write == SYSCALL_FAIL || res_write < (long)updated_contents.size()) {
-    perror("smash error: write failed");
-    this->evacuate(fd, contents);
-    return;
+  while(res_write < (long)updated_contents.size()) {
+    if (res_write == SYSCALL_FAIL){
+      perror("smash error: write failed");
+      this->evacuate(fd, contents);
+      return;
+    }
+    close(fd);
+    fd = open(this->args[1].c_str(), O_RDWR|O_TRUNC);
+    res_write = write(fd, updated_contents.c_str(), updated_contents.size());
   }
   if(close(fd) == SYSCALL_FAIL) {
     perror("smash error: close failed");
@@ -465,10 +480,10 @@ void RedirectionCommand::prepare() {
     return;
   }
   if(this->append){
-    this->file_fd = open((this->file_name).c_str(), O_RDWR|O_APPEND|O_CREAT, 0777);
+    this->file_fd = open((this->file_name).c_str(), O_RDWR|O_APPEND|O_CREAT, 0655);
   }
   else {
-    this->file_fd = open((this->file_name).c_str(), O_RDWR|O_CREAT|O_TRUNC, 0777);
+    this->file_fd = open((this->file_name).c_str(), O_RDWR|O_CREAT|O_TRUNC, 0655);
   }
   if(this->file_fd == SYSCALL_FAIL) {
     perror("smash error: open failed");
