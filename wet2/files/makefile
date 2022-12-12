@@ -4,7 +4,7 @@ HEADERS := $(wildcard *.h)
 TARGETS := $(TESTS:.cxx=.exe)
 RESULTS := $(TESTS:.cxx=.out)
 GRADE := grade.txt
-CXXFLAGS := -std=c++11 -O3
+CXXFLAGS := -std=c++11 -O3 -g
 
 .PHONY: all test clean
 all: $(TARGETS)
