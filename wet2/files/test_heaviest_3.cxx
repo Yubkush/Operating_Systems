@@ -17,6 +17,7 @@ int main() { // A
                     pid_t E_parent = getppid(); // D pid
                     pid_t ret = get_heaviest_ancestor();
                     assert(ret == getpid());
+                    std::cout << "===== SUCCESS =====" << std::endl;
                 }
                 else{
                     wait(nullptr);
@@ -32,7 +33,6 @@ int main() { // A
     }
     else{
         wait(nullptr);
-        std::cout << "===== SUCCESS =====" << std::endl;
     }    
     return 0;
 }
