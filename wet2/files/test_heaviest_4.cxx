@@ -29,7 +29,7 @@ int main() { // A
                     set_weight(10);
                     pid_t E_parent = getppid(); // D pid
                     pid_t ret = get_heaviest_ancestor();
-                    assert(ret == D_parent);
+                    assert(ret == E_parent);
                 }
                 else{
                     wait(nullptr);
