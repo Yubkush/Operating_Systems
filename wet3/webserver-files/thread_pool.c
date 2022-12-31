@@ -1,26 +1,90 @@
 #include "thread_pool.h"
 #include "request.h"
 
-void* tpWorkerHandle(void *tp_v) {
-    if(tp_v == NULL)
+#define IDLE -1
+
+conn_queue_t connQueueInit() {
+    conn_queue_t conn_q;
+    conn_q.head = conn_q.tail = NULL;
+    conn_q.size = 0;
+    return conn_q;
+}
+
+void enqueue(conn_queue_t *conn_q, conn_t conn) {
+    if(conn_q == NULL)
+        return;
+    if(conn_q->size == 0) {
+        if((conn_q->tail = (conn_elem*)malloc(sizeof(conn_elem))) == NULL)
+            return;
+        conn_q->tail->conn = conn;
+        conn_q->tail->next = NULL;
+        conn_q->tail->prev = NULL;
+        conn_q->head = conn_q->tail;
+    }
+    else {
+        if((conn_q->tail->prev = (conn_elem*)malloc(sizeof(conn_elem))) == NULL)
+            return;
+        conn_q->tail->prev->conn = conn;
+        conn_q->tail->prev->next = conn_q->tail;
+        conn_q->tail->prev->prev = NULL;
+        conn_q->tail = conn_q->tail->prev;
+    }
+    conn_q->size++;
+}
+
+conn_t dequeue(conn_queue_t *conn_q) {
+    conn_t conn;
+    if(conn_q == NULL || conn_q->size == 0)
+        return -1;
+    else if(conn_q->size == 1){
+        conn = conn_q->head->conn;
+        free(conn_q->head);
+        conn_q->head = conn_q->tail = NULL;
+    }
+    else {
+        conn = conn_q->head->conn;
+        conn_elem *temp = conn_q->head;
+        conn_q->head = conn_q->head->prev;
+        free(temp);
+        conn_q->head->next = NULL;
+    }
+    conn_q->size--;
+    return conn;
+}
+
+void connQueueDestroy(conn_queue_t *conn_q) {
+    if(conn_q == NULL)
+        return;
+    while(conn_q->size > 0) {
+        dequeue(conn_q);
+    }
+    free(conn_q);
+}
+
+void* tpWorkerHandle(void *args_v) {
+    if(args_v == NULL)
         return NULL;
-    thread_pool *tp = (thread_pool*)(tp_v);
+    thread_args_t *args = (thread_args_t*)(args_v);
+    thread_pool *tp = args->tp;
+    unsigned int worker_id = args->worker_id;
     while(1) {
         pthread_mutex_lock(&tp->conn_lock);
-        while(tp->conns_q_size == 0)
+        while(tp->buffer_conn.size == 0)
             pthread_cond_wait(&tp->conn_cond, &tp->conn_lock);
         // acquired lock and condition holds
-        conn_t conn = tp->conn_q_head->conn;
-        conn_elem *conn_q = tp->conn_q_head;
-        tp->conn_q_head = tp->conn_q_head->prev;
-        tp->conn_q_head->next = NULL; 
-        free(conn_q);
-        tp->conns_q_size--;
-        if(tp->conns_q_size > 0)
-            pthread_cond_signal(&tp->conn_cond);
+        conn_t conn = dequeue(&tp->buffer_conn);
+        tp->handled_conn[worker_id] = conn;
+        tp->num_handled_conn++;
         pthread_mutex_unlock(&tp->conn_lock);
         requestHandle(conn);
         Close(conn);
+
+        pthread_mutex_lock(&tp->conn_lock);
+        tp->num_handled_conn--;
+        if(tp->buffer_conn.size > 0)
+            pthread_cond_signal(&tp->conn_cond);
+        tp->handled_conn[worker_id] = IDLE;
+        pthread_mutex_unlock(&tp->conn_lock);
     }
     return NULL;
 }
@@ -31,22 +95,34 @@ thread_pool* threadPoolInit(size_t max_threads, size_t max_conns)
     if(tp == NULL)
         return NULL;
     if(pthread_mutex_init(&tp->conn_lock, NULL) != 0) {
-        free(tp);
+        threadPoolDestroy(tp);
         return NULL;
     }
     if((tp->threads = (pthread_t*)malloc(sizeof(pthread_t) * max_threads)) == NULL) {
-        free(tp);
+        threadPoolDestroy(tp);
         return NULL;
     }
-    tp->conn_q_head = NULL;
-    tp->conn_q_tail = NULL;
+    tp->buffer_conn = connQueueInit();
     tp->max_threads = max_threads;
     tp->max_conns = max_conns;
-    tp->conns_q_size = 0;
+    tp->num_handled_conn = 0;
     pthread_cond_init(&tp->conn_cond, NULL);
 
+    if((tp->args = (thread_args_t*)malloc(sizeof(thread_args_t) * max_threads)) == NULL) {
+        threadPoolDestroy(tp);
+        return NULL;
+    }
+
+    if((tp->handled_conn = (conn_t*)malloc(sizeof(conn_t) * max_threads)) == NULL) {
+        threadPoolDestroy(tp);
+        return NULL;
+    }
+
     for (int i = 0; i < max_threads; i++){
-		pthread_create(&tp->threads[i], NULL, &tpWorkerHandle, tp);
+        tp->args[i].tp = tp;
+        tp->args[i].worker_id = i;
+        tp->handled_conn[i] = -1;
+		pthread_create(&tp->threads[i], NULL, &tpWorkerHandle, &tp->args[i]);
 	}
 
     return tp;
@@ -58,14 +134,9 @@ void threadPoolDestroy(thread_pool *tp){
             return;
     }
     free(tp->threads);
-
-    conn_elem *c_temp = tp->conn_q_tail;
-    while(c_temp != NULL) {
-        Close(c_temp->conn);
-        conn_elem *next = c_temp->next;
-        free(c_temp);
-        c_temp = next;
-    }
+    free(tp->args);
+    free(tp->handled_conn);
+    connQueueDestroy(&tp->buffer_conn);
 
     if(pthread_cond_destroy(&tp->conn_cond) != 0) {
         free(tp);

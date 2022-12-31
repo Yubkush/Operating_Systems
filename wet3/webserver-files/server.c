@@ -59,16 +59,11 @@ int main(int argc, char *argv[])
         // do the work. 
         // 
         pthread_mutex_lock(&tp->conn_lock);
-        while(tp->conns_q_size == tp->max_conns)
+        while(tp->buffer_conn.size + tp->num_handled_conn == tp->max_conns)
             pthread_cond_wait(&tp->conn_cond, &tp->conn_lock);
 
         // insert conn to back of queue
-        if((tp->conn_q_tail->prev = (conn_elem*)malloc(sizeof(conn_elem))) == NULL)
-            break;
-        tp->conn_q_tail->prev->next = tp->conn_q_tail;
-        tp->conn_q_tail = tp->conn_q_tail->prev;
-        tp->conn_q_tail->prev = NULL;
-        tp->conns_q_size++;
+        enqueue(&tp->buffer_conn, connfd);
         pthread_cond_signal(&tp->conn_cond);
         pthread_mutex_unlock(&tp->conn_lock);
     }
