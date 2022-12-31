@@ -76,12 +76,13 @@ void* tpWorkerHandle(void *args_v) {
         tp->handled_conn[worker_id] = conn;
         tp->num_handled_conn++;
         pthread_mutex_unlock(&tp->conn_lock);
+
         requestHandle(conn);
         Close(conn);
 
         pthread_mutex_lock(&tp->conn_lock);
         tp->num_handled_conn--;
-        if(tp->buffer_conn.size > 0)
+        if(tp->buffer_conn.size + tp->num_handled_conn < tp->max_conns)
             pthread_cond_signal(&tp->conn_cond);
         tp->handled_conn[worker_id] = IDLE;
         pthread_mutex_unlock(&tp->conn_lock);
@@ -89,8 +90,10 @@ void* tpWorkerHandle(void *args_v) {
     return NULL;
 }
 
-thread_pool* threadPoolInit(size_t max_threads, size_t max_conns)
+thread_pool* threadPoolInit(int max_threads, int max_conns)
 {
+    if(max_threads <= 0 || max_conns <= 0)
+        return NULL;
     thread_pool *tp = (thread_pool*)malloc(sizeof(thread_pool));
     if(tp == NULL)
         return NULL;
@@ -121,8 +124,11 @@ thread_pool* threadPoolInit(size_t max_threads, size_t max_conns)
     for (int i = 0; i < max_threads; i++){
         tp->args[i].tp = tp;
         tp->args[i].worker_id = i;
-        tp->handled_conn[i] = -1;
-		pthread_create(&tp->threads[i], NULL, &tpWorkerHandle, &tp->args[i]);
+        tp->handled_conn[i] = IDLE;
+		if(pthread_create(&tp->threads[i], NULL, &tpWorkerHandle, &tp->args[i]) != 0) {
+            threadPoolDestroy(tp);
+            return NULL;
+        }
 	}
 
     return tp;

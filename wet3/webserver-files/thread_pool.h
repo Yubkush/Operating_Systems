@@ -54,8 +54,8 @@ typedef struct thread_pool{
     pthread_cond_t conn_cond;
 } thread_pool;
 
-void* tpWorkerHandle(void *tp_v);
-thread_pool* threadPoolInit(size_t max_threads, size_t max_conns);
+void* tpWorkerHandle(void *args);
+thread_pool* threadPoolInit(int max_threads, int max_conns);
 void threadPoolDestroy(thread_pool *tp);
 
 #endif /* __POOL_H__ */
