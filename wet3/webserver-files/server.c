@@ -49,55 +49,46 @@ int main(int argc, char *argv[])
     char* shched_alg = argv[4];
     // HW3: Create some threads...
     thread_pool *tp = threadPoolInit(threads, conns);
-
     listenfd = Open_listenfd(port);
     while (1) {
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *) &clientlen);
-
+        struct timeval arrival;
+        if(gettimeofday(&arrival, NULL) != 0){
+            return 1;
+        }
         // 
         // HW3: In general, don't handle the request in the main thread.
         // Save the relevant info in a buffer and have one of the worker threads 
         // do the work. 
         // 
-        if(strcmp("dt", shched_alg) == 0) {
-            if(tp->buffer_conn.size + tp->num_handled_conn == tp->max_conns) {
+        pthread_mutex_lock(&tp->conn_lock);
+        if(tp->buffer_conn.size + tp->num_handled_conn == tp->max_conns) {
+            if(strcmp("dt", shched_alg) == 0) {
+                pthread_mutex_unlock(&tp->conn_lock);
                 Close(connfd);
                 continue;
             }
-            pthread_mutex_lock(&tp->conn_lock);
-            enqueue(&tp->buffer_conn, connfd);
-            pthread_cond_signal(&tp->conn_cond);
-            pthread_mutex_unlock(&tp->conn_lock);
-        }
-        else if(strcmp("block", shched_alg) == 0) {
-            pthread_mutex_lock(&tp->conn_lock);
-            while(tp->buffer_conn.size + tp->num_handled_conn == tp->max_conns)
-                pthread_cond_wait(&tp->conn_cond, &tp->conn_lock);
-
-            // insert conn to back of queue
-            enqueue(&tp->buffer_conn, connfd);
-            pthread_cond_signal(&tp->conn_cond);
-            pthread_mutex_unlock(&tp->conn_lock);
-        }
-        else if(strcmp("dh", shched_alg) == 0) {
-            if(tp->buffer_conn.size + tp->num_handled_conn == tp->max_conns) {
-                pthread_mutex_lock(&tp->conn_lock);
-                conn_t conn_dropped = dequeue(&tp->buffer_conn);
-                enqueue(&tp->buffer_conn, connfd);
+            else if(strcmp("block", shched_alg) == 0) {
+                while(tp->buffer_conn.size + tp->num_handled_conn == tp->max_conns)
+                    pthread_cond_wait(&tp->main_cond, &tp->conn_lock);
+            }
+            else if(strcmp("dh", shched_alg) == 0) {
+                char buf[MAXBUF];
+                conn_info_t conn_dropped;
+                dequeue(&tp->buffer_conn, &conn_dropped);
+                enqueue(&tp->buffer_conn, connfd, arrival);
                 pthread_mutex_unlock(&tp->conn_lock);
-                Close(conn_dropped);
+                Close(conn_dropped.conn);
                 continue;
             }
-            pthread_mutex_lock(&tp->conn_lock);
-            enqueue(&tp->buffer_conn, connfd);
-            pthread_cond_signal(&tp->conn_cond);
-            pthread_mutex_unlock(&tp->conn_lock);
+            else {
+                return 1;
+            }
         }
-        else {
-            app_error("bad sched_alg");
-            return 1;
-        }
+        enqueue(&tp->buffer_conn, connfd, arrival);
+        pthread_cond_signal(&tp->worker_cond);
+        pthread_mutex_unlock(&tp->conn_lock);
     }
 
     threadPoolDestroy(tp);

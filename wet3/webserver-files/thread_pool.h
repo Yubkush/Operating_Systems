@@ -6,8 +6,13 @@
 typedef int conn_t;
 typedef struct thread_pool thread_pool;
 
-typedef struct conn_elem{
+typedef struct conn_info {
     conn_t conn;
+    struct timeval req_arrival;
+} conn_info_t;
+
+typedef struct conn_elem{
+    conn_info_t info;
     struct conn_elem *next;
     struct conn_elem *prev;
 } conn_elem;
@@ -19,14 +24,21 @@ typedef struct conn_queue {
 } conn_queue_t;
 
 conn_queue_t connQueueInit();
-void enqueue(conn_queue_t *conn_q, conn_t conn);
-conn_t dequeue(conn_queue_t *conn_q);
+void enqueue(conn_queue_t *conn_q, conn_t conn, struct timeval req_arrival);
+void dequeue(conn_queue_t *conn_q, conn_info_t* info);
 void connQueueDestroy(conn_queue_t *conn_q);
 
 typedef struct thread_args {
     thread_pool *tp;
-    unsigned int worker_id;
+    int thread_id;
 } thread_args_t;
+
+typedef struct thread_stats {
+    int thread_id;
+    int count;
+    int static_count;
+    int dynamic_count;
+} thread_stats_t;
 
 /**
  * @struct thread pool
@@ -44,6 +56,7 @@ typedef struct thread_args {
  */
 typedef struct thread_pool{
     pthread_t *threads;
+    thread_stats_t *tstats;
     thread_args_t *args;
     conn_queue_t buffer_conn;
     conn_t *handled_conn;
@@ -51,11 +64,19 @@ typedef struct thread_pool{
     size_t max_conns;
     size_t num_handled_conn;
     pthread_mutex_t conn_lock;
-    pthread_cond_t conn_cond;
+    pthread_cond_t worker_cond;
+    pthread_cond_t main_cond;
 } thread_pool;
 
 void* tpWorkerHandle(void *args);
 thread_pool* threadPoolInit(int max_threads, int max_conns);
 void threadPoolDestroy(thread_pool *tp);
+
+
+typedef struct req_stats{
+    conn_t conn;
+    struct timeval req_arrival;
+    struct timeval req_dispatch;
+} req_stats_t;
 
 #endif /* __POOL_H__ */
