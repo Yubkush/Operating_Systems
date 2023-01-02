@@ -28,7 +28,8 @@ def test_basic(policy, server_port):
     with Server("./server", server_port, 1, 1, policy) as server:
         sleep(0.1)
         for req in ["output.cgi?1", "favicon.ico", "home.html"]:
-            r = requests.get(f"http://localhost:{server_port}/{req}")
+            session = FuturesSession()
+            r = session.get(f"http://localhost:{server_port}/{req}").result()
             assert r.status_code == 200
             assert r.content
         server.send_signal(SIGINT)
@@ -395,8 +396,9 @@ def test_drop_random(threads, num_clients, queue_size, times, server_port):
             expected_drop = 0
             for _ in range(num_clients - threads):
                 if threads + in_queue >= queue_size:
-                    in_queue -= random_drop_formula(queue_size, in_queue)
-                    expected_drop += random_drop_formula(queue_size, in_queue)
+                    temp_in_queue=in_queue
+                    in_queue -= random_drop_formula(queue_size, temp_in_queue)
+                    expected_drop += random_drop_formula(queue_size, temp_in_queue)
                 session = FuturesSession()
                 others.append((session, session.get(f"http://localhost:{server_port}/home.html")))
                 in_queue += 1

@@ -75,8 +75,8 @@ void* tpWorkerHandle(void *args_v) {
     int thread_id = args->thread_id;
     while(1) {
         pthread_mutex_lock(&tp->conn_lock);
-        char buf[MAXBUF];
         while(tp->buffer_conn.size == 0) {
+            // fprintf(stderr, "sleep\n");
             pthread_cond_wait(&tp->worker_cond, &tp->conn_lock);
         }
         // acquired lock and condition holds
@@ -87,11 +87,12 @@ void* tpWorkerHandle(void *args_v) {
         tp->tstats[thread_id].count++;
         req_stats_t req_stats = calculateStats(info);
         pthread_mutex_unlock(&tp->conn_lock);
+
         requestHandle(info.conn, &req_stats, &(tp->tstats[thread_id]));
         Close(info.conn);
 
         pthread_mutex_lock(&tp->conn_lock);
-        if(tp->buffer_conn.size + tp->num_handled_conn == tp->max_conns)
+        if(strcmp(tp->sched_alg, "block") == 0 && tp->buffer_conn.size + tp->num_handled_conn == tp->max_conns)
             pthread_cond_signal(&tp->main_cond);
         tp->num_handled_conn--;
         tp->handled_conn[thread_id] = IDLE;
@@ -100,7 +101,7 @@ void* tpWorkerHandle(void *args_v) {
     return NULL;
 }
 
-thread_pool* threadPoolInit(int max_threads, int max_conns)
+thread_pool* threadPoolInit(int max_threads, int max_conns, char *sched_alg)
 {
     if(max_threads <= 0 || max_conns <= 0)
         return NULL;
@@ -123,6 +124,7 @@ thread_pool* threadPoolInit(int max_threads, int max_conns)
     tp->max_threads = max_threads;
     tp->max_conns = max_conns;
     tp->num_handled_conn = 0;
+    tp->sched_alg = sched_alg;
     pthread_cond_init(&tp->worker_cond, NULL);
     pthread_cond_init(&tp->main_cond, NULL);
 

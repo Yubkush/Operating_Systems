@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
     getargs(&port, &threads, &conns, argc, argv);
     char* shched_alg = argv[4];
     // HW3: Create some threads...
-    thread_pool *tp = threadPoolInit(threads, conns);
+    thread_pool *tp = threadPoolInit(threads, conns, shched_alg);
     listenfd = Open_listenfd(port);
     while (1) {
         clientlen = sizeof(clientaddr);
@@ -74,12 +74,13 @@ int main(int argc, char *argv[])
                     pthread_cond_wait(&tp->main_cond, &tp->conn_lock);
             }
             else if(strcmp("dh", shched_alg) == 0) {
-                char buf[MAXBUF];
                 conn_info_t conn_dropped;
-                dequeue(&tp->buffer_conn, &conn_dropped);
                 enqueue(&tp->buffer_conn, connfd, arrival);
+                dequeue(&tp->buffer_conn, &conn_dropped);
                 pthread_mutex_unlock(&tp->conn_lock);
                 Close(conn_dropped.conn);
+                // fprintf(stderr, "Buffer size DH: %lu\n", tp->buffer_conn.size);
+                // fprintf(stderr, "Num of handled requests DH: %lu\n", tp->num_handled_conn);
                 continue;
             }
             else {
@@ -89,6 +90,8 @@ int main(int argc, char *argv[])
         enqueue(&tp->buffer_conn, connfd, arrival);
         pthread_cond_signal(&tp->worker_cond);
         pthread_mutex_unlock(&tp->conn_lock);
+        // fprintf(stderr, "Buffer size: %lu\n", tp->buffer_conn.size);
+        // fprintf(stderr, "Num of handled requests: %lu\n", tp->num_handled_conn);
     }
 
     threadPoolDestroy(tp);

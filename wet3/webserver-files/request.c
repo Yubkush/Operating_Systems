@@ -27,21 +27,18 @@ void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longm
    sprintf(body, "%s<hr>OS-HW3 Web Server\r\n", body);
 
    // Write out the header information for this response
-   // sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
-   // Rio_writen(fd, buf, strlen(buf));
-   // printf("%s", buf);
-
-   // sprintf(buf, "Content-Type: text/html\r\n");
-   // Rio_writen(fd, buf, strlen(buf));
-   // printf("%s", buf);
-
-   // sprintf(buf, "Content-Length: %lu\r\n\r\n", strlen(body));
-   // Rio_writen(fd, buf, strlen(buf));
-   // printf("%s", buf);
-
    sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
+   Rio_writen(fd, buf, strlen(buf));
+   printf("%s", buf);
+
    sprintf(buf, "Content-Type: text/html\r\n");
+   Rio_writen(fd, buf, strlen(buf));
+   printf("%s", buf);
+
    sprintf(buf, "Content-Length: %lu\r\n\r\n", strlen(body));
+   Rio_writen(fd, buf, strlen(buf));
+   printf("%s", buf);
+
    printStatistics(buf, req_stats, thr_stats);
    Rio_writen(fd, buf, strlen(buf));
    printf("%s", buf);
@@ -129,15 +126,15 @@ void requestServeDynamic(int fd, char *filename, char *cgiargs, req_stats_t *req
    sprintf(buf, "%sServer: OS-HW3 Web Server\r\n", buf);
    printStatistics(buf, req_stats, thr_stats);
    Rio_writen(fd, buf, strlen(buf));
-
-   if (Fork() == 0) {
+   pid_t child = Fork();
+   if (child == 0) {
       /* Child process */
       Setenv("QUERY_STRING", cgiargs, 1);
       /* When the CGI process writes to stdout, it will instead go to the socket */
       Dup2(fd, STDOUT_FILENO);
       Execve(filename, emptylist, environ);
    }
-   Wait(NULL);
+   WaitPid(child, NULL, 0);
 }
 
 

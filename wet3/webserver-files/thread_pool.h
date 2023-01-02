@@ -66,10 +66,11 @@ typedef struct thread_pool{
     pthread_mutex_t conn_lock;
     pthread_cond_t worker_cond;
     pthread_cond_t main_cond;
+    char *sched_alg;
 } thread_pool;
 
 void* tpWorkerHandle(void *args);
-thread_pool* threadPoolInit(int max_threads, int max_conns);
+thread_pool* threadPoolInit(int max_threads, int max_conns, char *sched_alg);
 void threadPoolDestroy(thread_pool *tp);
 
 
