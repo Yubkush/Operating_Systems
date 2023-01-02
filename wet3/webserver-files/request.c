@@ -11,7 +11,7 @@ void printStatistics(char buf[MAXLINE] ,req_stats_t *req_stats, thread_stats_t *
    sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, thr_stats->thread_id);
    sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, thr_stats->count);
    sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, thr_stats->static_count);
-   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, thr_stats->dynamic_count);
+   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n", buf, thr_stats->dynamic_count);
 }
 
 // requestError(      fd,    filename,        "404",    "Not found", "OS-HW3 Server could not find this file");
@@ -35,14 +35,18 @@ void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longm
    Rio_writen(fd, buf, strlen(buf));
    printf("%s", buf);
 
-   sprintf(buf, "Content-Length: %lu\r\n\r\n", strlen(body));
+   sprintf(buf, "Content-Length: %lu\r\n", strlen(body));
    Rio_writen(fd, buf, strlen(buf));
    printf("%s", buf);
 
+   sprintf(buf, "");
    printStatistics(buf, req_stats, thr_stats);
    Rio_writen(fd, buf, strlen(buf));
    printf("%s", buf);
 
+   sprintf(buf, "\r\n");
+   Rio_writen(fd, buf, strlen(buf));
+   printf("%s", buf);
 
    // Write out the content
    Rio_writen(fd, body, strlen(body));
@@ -157,8 +161,9 @@ void requestServeStatic(int fd, char *filename, int filesize, req_stats_t *req_s
    sprintf(buf, "HTTP/1.0 200 OK\r\n");
    sprintf(buf, "%sServer: OS-HW3 Web Server\r\n", buf);
    sprintf(buf, "%sContent-Length: %d\r\n", buf, filesize);
-   sprintf(buf, "%sContent-Type: %s\r\n\r\n", buf, filetype);
+   sprintf(buf, "%sContent-Type: %s\r\n", buf, filetype);
    printStatistics(buf, req_stats, thr_stats);
+   sprintf(buf, "%s\r\n", buf);
    Rio_writen(fd, buf, strlen(buf));
 
    //  Writes out to the client socket the memory-mapped file 

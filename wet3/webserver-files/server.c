@@ -79,8 +79,6 @@ int main(int argc, char *argv[])
                 dequeue(&tp->buffer_conn, &conn_dropped);
                 pthread_mutex_unlock(&tp->conn_lock);
                 Close(conn_dropped.conn);
-                // fprintf(stderr, "Buffer size DH: %lu\n", tp->buffer_conn.size);
-                // fprintf(stderr, "Num of handled requests DH: %lu\n", tp->num_handled_conn);
                 continue;
             }
             else {
@@ -90,8 +88,6 @@ int main(int argc, char *argv[])
         enqueue(&tp->buffer_conn, connfd, arrival);
         pthread_cond_signal(&tp->worker_cond);
         pthread_mutex_unlock(&tp->conn_lock);
-        // fprintf(stderr, "Buffer size: %lu\n", tp->buffer_conn.size);
-        // fprintf(stderr, "Num of handled requests: %lu\n", tp->num_handled_conn);
     }
 
     threadPoolDestroy(tp);

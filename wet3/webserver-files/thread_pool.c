@@ -76,7 +76,6 @@ void* tpWorkerHandle(void *args_v) {
     while(1) {
         pthread_mutex_lock(&tp->conn_lock);
         while(tp->buffer_conn.size == 0) {
-            // fprintf(stderr, "sleep\n");
             pthread_cond_wait(&tp->worker_cond, &tp->conn_lock);
         }
         // acquired lock and condition holds
