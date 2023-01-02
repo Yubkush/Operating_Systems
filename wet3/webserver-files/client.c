@@ -71,22 +71,6 @@ void clientPrint(int fd)
   }
 }
 
-typedef struct args {
-  int clientfd;
-  char* filename;
-} args_t;
-
-void* clientFunc(void* args_v){
-  if(args_v == NULL)
-        return NULL;
-  args_t *args = (args_t*)(args_v);
-  int clientfd = args->clientfd;
-  char* filename = args->filename;
-  clientSend(clientfd, filename);
-  clientPrint(clientfd);
-  return NULL;
-}
-
 int main(int argc, char *argv[])
 {
   char *host, *filename;
@@ -102,28 +86,13 @@ int main(int argc, char *argv[])
   port = atoi(argv[2]);
   filename = argv[3];
 
-  pthread_t threads[6];
-  args_t thread_args[6];
-
   /* Open a single connection to the specified host and port */
-
-  for (size_t i = 0; i < 6; i++){
-    thread_args[i].clientfd = Open_clientfd(host, port);;
-    thread_args[i].filename = filename;
-  }
-
-  for (size_t i = 0; i < 6; i++) {
-    if(pthread_create(&threads[i], NULL, &clientFunc, &thread_args[i]) != 0)
-      return 1;
-  }
+  clientfd = Open_clientfd(host, port);
   
-  for (size_t i = 0; i < 6; i++) {
-    if(pthread_join(threads[i], NULL) != 0)
-      return 1;
-    Close(thread_args[i].clientfd);
-  }
+  clientSend(clientfd, filename);
+  clientPrint(clientfd);
     
-  
+  Close(clientfd);
 
   exit(0);
 }
