@@ -46,9 +46,9 @@ int main(int argc, char *argv[])
     struct sockaddr_in clientaddr;
 
     getargs(&port, &threads, &conns, argc, argv);
-    char* shched_alg = argv[4];
+    char* sched_alg = argv[4];
     // HW3: Create some threads...
-    thread_pool *tp = threadPoolInit(threads, conns, shched_alg);
+    thread_pool *tp = threadPoolInit(threads, conns, sched_alg);
     listenfd = Open_listenfd(port);
     while (1) {
         clientlen = sizeof(clientaddr);
@@ -64,22 +64,30 @@ int main(int argc, char *argv[])
         // 
         pthread_mutex_lock(&tp->conn_lock);
         if(tp->buffer_conn.size + tp->num_handled_conn == tp->max_conns) {
-            if(strcmp("dt", shched_alg) == 0) {
+            if(strcmp("dt", sched_alg) == 0) {
                 pthread_mutex_unlock(&tp->conn_lock);
                 Close(connfd);
                 continue;
             }
-            else if(strcmp("block", shched_alg) == 0) {
+            else if(strcmp("block", sched_alg) == 0) {
                 while(tp->buffer_conn.size + tp->num_handled_conn == tp->max_conns)
                     pthread_cond_wait(&tp->main_cond, &tp->conn_lock);
             }
-            else if(strcmp("dh", shched_alg) == 0) {
+            else if(strcmp("dh", sched_alg) == 0) {
                 conn_info_t conn_dropped;
                 enqueue(&tp->buffer_conn, connfd, arrival);
                 dequeue(&tp->buffer_conn, &conn_dropped);
                 pthread_mutex_unlock(&tp->conn_lock);
                 Close(conn_dropped.conn);
                 continue;
+            }
+            else if(strcmp("random", sched_alg) == 0) {
+                removeHalfRandom(tp);
+                if(tp->buffer_conn.size + tp->num_handled_conn == tp->max_conns){
+                    pthread_mutex_unlock(&tp->conn_lock);
+                    Close(connfd);
+                    continue;
+                }
             }
             else {
                 return 1;

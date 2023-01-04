@@ -26,6 +26,7 @@ typedef struct conn_queue {
 conn_queue_t connQueueInit();
 void enqueue(conn_queue_t *conn_q, conn_t conn, struct timeval req_arrival);
 void dequeue(conn_queue_t *conn_q, conn_info_t* info);
+void removeHalfRandom(struct thread_pool *tp);
 void connQueueDestroy(conn_queue_t *conn_q);
 
 typedef struct thread_args {

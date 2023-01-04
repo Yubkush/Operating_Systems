@@ -50,6 +50,38 @@ void dequeue(conn_queue_t *conn_q, conn_info_t* info) {
     conn_q->size--;
 }
 
+static void removeConn(conn_elem *to_remove, conn_elem **head, conn_elem **tail) {
+    if (to_remove == *tail) {
+        *tail = to_remove->next;
+    }
+    if (to_remove == *head) {
+        *head = to_remove->prev;
+    }
+    if (to_remove->prev != NULL) {
+        to_remove->prev->next = to_remove->next;
+    }
+    if (to_remove->next != NULL) {
+        to_remove->next->prev = to_remove->prev;
+    }
+    Close(to_remove->info.conn);
+    free(to_remove);
+}
+
+void removeHalfRandom(struct thread_pool *tp) {
+    if(tp == NULL || tp->buffer_conn.size == 0)
+        return;
+    srand(time(0));
+    int removed = tp->buffer_conn.size;
+    for(int i=0; tp->buffer_conn.size > 0 && i < removed/2 + removed%2; i++) {
+        int to_remove_idx = rand() % tp->buffer_conn.size;
+        conn_elem *temp = tp->buffer_conn.tail;
+        for(int j = 0; j < to_remove_idx; j++)
+            temp = temp->next;
+        removeConn(temp, &tp->buffer_conn.head, &tp->buffer_conn.tail);
+        tp->buffer_conn.size--;
+    }
+}
+
 void connQueueDestroy(conn_queue_t *conn_q) {
     if(conn_q == NULL)
         return;
