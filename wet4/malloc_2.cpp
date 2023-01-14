@@ -18,7 +18,7 @@ void* smalloc(size_t size) {
         return NULL;
     }
     metadata_t *tmp = list_head.next;
-    metadata_t *last;
+    metadata_t *last = nullptr;
     while(tmp != nullptr){
         if(tmp->is_free && tmp->size >= real_size){
             tmp->is_free = false;
@@ -35,6 +35,7 @@ void* smalloc(size_t size) {
     tmp->size = real_size;
     tmp->is_free = false;
     tmp->next = nullptr;
+    if(list_head.next == nullptr){last = &list_head;} // if this is the first node
     tmp->prev = last;
     last->next = tmp;
     return (char*)tmp + sizeof(metadata_t);
