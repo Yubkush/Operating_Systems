@@ -1,7 +1,9 @@
 #include <unistd.h>
+#include <cstring>
 #define MAX_SIZE (size_t)1e8
 #define SYSCALL_FAIL -1
 
+using std::memset;
 
 typedef struct MallocMetadata {
     size_t size; // include metadata_t size
@@ -42,5 +44,10 @@ void* smalloc(size_t size) {
 }
 
 void* scalloc(size_t num, size_t size){
-    
+    void *addr = smalloc(size * num);
+    if(addr == nullptr) {
+        return nullptr;
+    }
+    memset(addr, 0, size * num);
+    return addr;
 }
