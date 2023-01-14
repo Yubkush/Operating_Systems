@@ -29,8 +29,7 @@ void* smalloc(size_t size) {
     if(*(ssize_t*)brk == SYSCALL_FAIL) {
         return NULL;
     }
-    void *data_addr = (void*)(*(size_t*)meta_addr + sizeof(metadata_t));
+    void *data_addr = (char*)meta_addr + sizeof(metadata_t);
     free_list.push_back((metadata_t){real_size, false, meta_addr, data_addr});
     return data_addr;
 }
-
