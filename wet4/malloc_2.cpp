@@ -86,10 +86,10 @@ void* srealloc(void* oldp, size_t size) {
         return smalloc(size);
     }
     metadata_t *p_meta = (metadata_t*)oldp - 1;
-    if(p_meta->size < real_size){
+    if(p_meta->size >= real_size){
         return oldp;
     }
-    void* newp = smalloc(real_size);
+    void* newp = smalloc(size);
     if(newp == nullptr){return NULL;}
     memmove(newp, oldp, size);
     sfree(oldp);
