@@ -3,6 +3,7 @@
 #include <list>
 #include <random>
 #include <limits>
+#include <sys/mman.h>
 #define MAX_SIZE (size_t)1e8
 #define MMAP_THRESH (size_t)128*1024
 #define SYSCALL_FAIL -1
@@ -26,25 +27,20 @@ typedef struct Stats {
 stats_t stats = {0, 0, 0, 0};
 
 typedef struct MallocMetadata {
+    __int32_t cookies;
     size_t size; // not including metadata_t size
     bool is_free;
-    __int32_t cookies;
     MallocMetadata* addr_next;
     MallocMetadata* addr_prev;
     MallocMetadata* size_next;
     MallocMetadata* size_prev;
 } metadata_t;
 
-class AddrCondition {
-    public:
-        AddrCondition() = default;
-        ~AddrCondition() = default;
-        bool operator()(metadata_t *m1, metadata_t *m2) const {
-            return m1 < m2;
-        }
-};
+static void checkCookies(metadata_t *m);
 
 static bool cmp_metadata(metadata_t *m1, metadata_t *m2) {
+    checkCookies(m1);
+    checkCookies(m2);
     if(m1->size < m2->size)
         return true;
     else if(m1->size > m2->size)
@@ -52,22 +48,23 @@ static bool cmp_metadata(metadata_t *m1, metadata_t *m2) {
     return m1 < m2;
 }
 
-// set random cookies
-std::random_device rd;
-std::mt19937 gen(rd());
-std::uniform_int_distribution<> dist(std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
-const __int32_t cookies = dist(gen);
-
-
 class MemManage {
+    private:
+        __int32_t cookies;
     public:
         metadata_t addr_head;
         metadata_t free_head;
         metadata_t *wilderness;
         MemManage(): wilderness(nullptr) {
-            addr_head = {0, false, cookies, nullptr, nullptr, nullptr, nullptr};
-            free_head = {0, false, cookies, nullptr, nullptr, nullptr, nullptr};
+            addr_head = {cookies, 0, false , nullptr, nullptr, nullptr, nullptr};
+            free_head = {cookies, 0, false , nullptr, nullptr, nullptr, nullptr};
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<> dist(std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
+            cookies = dist(gen);
         }
+
+        __int32_t getCookies() { return this->cookies; }
 
         ~MemManage() = default;
         void createBlock(size_t size, metadata_t *addr) {
@@ -75,20 +72,27 @@ class MemManage {
             // insert to addr list
             if(tmp == nullptr) { // addr list is empty
                 addr_head.addr_next = addr;
+                checkCookies(addr);
                 addr->addr_prev = nullptr;
                 addr->addr_next = nullptr;
             }
             else{ // not empty
+                checkCookies(tmp);
                 while(tmp->addr_next != nullptr) {
+                    checkCookies(tmp);
                     tmp = tmp->addr_next;
                 }
+                checkCookies(tmp);
                 tmp->addr_next = addr;
+                checkCookies(addr);
                 addr->addr_prev = tmp;
                 addr->addr_next = nullptr;
             }
             // update block 
+            checkCookies(addr);
             addr->is_free = false;
             addr->size = size;
+            addr->cookies = cookies;
             wilderness = addr;
             // update stats
             stats.num_allocated_blocks++;
@@ -100,31 +104,43 @@ class MemManage {
             // insert to size list
             if(tmp == nullptr) { // size list is empty
                 free_head.size_next = addr;
+                checkCookies(addr);
                 addr->size_prev = nullptr;
                 addr->size_next = nullptr;
             }
             else{ // not empty
+                checkCookies(tmp);
                 while(tmp->size_next != nullptr && cmp_metadata(tmp, addr)) {
+                    checkCookies(tmp);
                     tmp = tmp->size_next;
                 }
+                checkCookies(addr);
                 addr->size_next = tmp->size_next;
+                checkCookies(tmp);
                 if(tmp->size_next != nullptr) tmp->size_next->size_prev = addr;
+                checkCookies(tmp);
                 tmp->size_next = addr;
+                checkCookies(addr);
                 addr->size_prev = tmp;
             }
+            checkCookies(addr);
             addr->is_free = true;
             stats.num_free_blocks++;
             stats.num_free_bytes += addr->size;
         }
 
         void removeFreeBlock(metadata_t *block) {
+            checkCookies(block);
             if(block->size_prev == nullptr) { // first node in list
                 free_head.size_next = block->size_next;
             }
             else if(block->size_next == nullptr) { // last node in list, not first one
+                checkCookies(block->size_prev);
                 block->size_prev->size_next = nullptr;
             }
             else {
+                checkCookies(block->size_prev);
+                checkCookies(block->size_next);
                 block->size_prev->size_next = block->size_next;
                 block->size_next->size_prev = block->size_prev;
             }
@@ -135,8 +151,10 @@ class MemManage {
 
         FreeBlocks findFreeBlock(size_t memory ,metadata_t* result){
             metadata_t *tmp = free_head.size_next;
+            checkCookies(tmp);
             while(tmp != nullptr && tmp->size < memory) {
                 tmp = tmp->size_next;
+                checkCookies(tmp);
             }
             if(tmp == nullptr)
                 return FreeBlocks::not_found;
@@ -147,6 +165,7 @@ class MemManage {
             metadata_t *frag = tmp;
             while(tmp != nullptr && tmp->size < memory + 128 + meta_s) {
                 tmp = tmp->size_next;
+                checkCookies(tmp);
             }
             if(tmp == nullptr) {
                 result = frag;
@@ -158,7 +177,9 @@ class MemManage {
 
         void splitBlock(size_t memory ,metadata_t* block) {
             metadata_t *new_block = (metadata_t*)((char*)block + memory + meta_s);
+            new_block->cookies = this->cookies;
             new_block->size = block->size - meta_s - memory;
+            checkCookies(block);
             block->size = memory;
             // update addr list
             new_block->addr_next = block->addr_next;
@@ -179,6 +200,7 @@ class MemManage {
         }
 
         void mergeBlocks(metadata_t* block) {
+            checkCookies(block);
             // update wilderness
             if(block->addr_next == wilderness) {
                 wilderness = block;
@@ -186,6 +208,7 @@ class MemManage {
             if(block->is_free) {
                 removeFreeBlock(block);
             }
+            checkCookies(block->addr_next);
             if(block->addr_next->is_free) {
                 removeFreeBlock(block->addr_next);
             }
@@ -204,15 +227,34 @@ class MemManage {
 
 MemManage block_list;
 
+static void checkCookies(metadata_t *m) {
+    if(m != nullptr && m->cookies != block_list.getCookies())
+        exit(0xdeadbeef);
+}
+
+void* memoryMap(size_t size) {
+    void *res = mmap(nullptr, size, PROT_EXEC | PROT_READ | PROT_WRITE, MAP_ANONYMOUS, -1, 0);
+    if(*(ssize_t*)res == SYSCALL_FAIL) {
+        return NULL;
+    }
+    metadata_t *mapped = (metadata_t*)res;
+    *mapped = (metadata_t){block_list.getCookies(), size, false, nullptr, nullptr, nullptr, nullptr};
+    return (char*)res + meta_s;
+}
+
 void* smalloc(size_t size) {
     size_t real_size = size + meta_s;
-    if(size == 0 || real_size > MAX_SIZE){
+    if(size == 0 || size > MAX_SIZE){   // check input
         return NULL;
+    }
+    else if(size >= MMAP_THRESH) {  // mmap instead of sbrk
+        return memoryMap(real_size);
     }
     metadata_t *block = nullptr;
     FreeBlocks result = block_list.findFreeBlock(size, block);
     switch (result) {
         case FreeBlocks::not_found: {
+            checkCookies(block_list.wilderness);
             if(block_list.wilderness->is_free) {
                 void *res = sbrk(size - block_list.wilderness->size);
                 if(*(ssize_t*)res == SYSCALL_FAIL) {
@@ -244,6 +286,11 @@ void* smalloc(size_t size) {
 }
 
 void* scalloc(size_t num, size_t size) {
+    if(size*num >= MMAP_THRESH) {  // mmap instead of sbrk
+        void *addr = memoryMap(size*num + sizeof(metadata_t));
+        memset(addr, 0, size * num);
+        return addr;
+    }
     void *addr = smalloc(size * num);
     if(addr == nullptr) {
         return NULL;
@@ -254,19 +301,27 @@ void* scalloc(size_t num, size_t size) {
 
 void sfree(void* p) {
     metadata_t *p_meta = (metadata_t*)p - 1;
+    checkCookies(p_meta);
     if(p == nullptr || p_meta->is_free == true)
         return;
+    if(p_meta->size >= MMAP_THRESH) {
+        munmap(p_meta, p_meta->size + meta_s);
+        return;
+    }
     block_list.insertFreeBlock(p_meta);
     // merge free blocks ***chalange 2
+    checkCookies(p_meta->addr_next);
     if(p_meta->addr_next != nullptr && p_meta->addr_next->is_free) {
         block_list.mergeBlocks(p_meta);
     }
+    checkCookies(p_meta->addr_prev);
     if(p_meta->addr_prev != nullptr && p_meta->addr_prev->is_free) {
         block_list.mergeBlocks(p_meta->addr_prev);
     }
 }
 
 static void splitRealloc(size_t size ,metadata_t* to_split) {
+    checkCookies(to_split);
     if(to_split->size > size + 128 + meta_s) {
         block_list.splitBlock(size, to_split);
     }
@@ -276,10 +331,22 @@ void* srealloc(void* oldp, size_t size) {
     if(size == 0 || size + meta_s > MAX_SIZE){
         return NULL;
     }
+    if(size >= MMAP_THRESH) {    
+        metadata_t *p_meta = (metadata_t*)oldp - 1;
+        void *newp = memoryMap(size + sizeof(metadata_t));
+        checkCookies(p_meta);
+        memmove(newp, oldp, p_meta->size);
+        munmap(oldp, p_meta->size);
+        return newp;
+    }
     if(oldp == nullptr){
         return smalloc(size);
     }
     metadata_t *p_meta = (metadata_t*)oldp - 1;
+    checkCookies(p_meta);
+    checkCookies(p_meta->addr_prev);
+    checkCookies(p_meta->addr_next);
+    checkCookies(block_list.wilderness);
     if(p_meta->size >= size){   // 1.a
         splitRealloc(size, (metadata_t*)oldp);
         return oldp;
