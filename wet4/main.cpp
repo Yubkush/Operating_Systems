@@ -1,6 +1,9 @@
-#include "malloc_2.cpp"
+#include "malloc_3.cpp"
 #include <iostream>
 #include <cassert>
+
+#define MAX_ALLOCATION_SIZE (1e8)
+#define MIN_SPLIT_SIZE (128)
 
 void build_arr(int *arr, size_t size) {
     for (size_t i = 0; i < size; i++) {
@@ -15,117 +18,98 @@ void print_arr(int *arr, size_t size) {
     std::cout << std::endl;
 }
 
-void assert_stat(size_t free_blocks, size_t free_bytes, size_t allocated_blocks, size_t allocated_bytes, size_t meta_data_bytes) {
+template <typename T>
+void populate_array(T *array, size_t len)
+{
+    for (size_t i = 0; i < len; i++)
+    {
+        array[i] = (T)i;
+    }
+}
+
+template <typename T>
+void validate_array(T *array, size_t len)
+{
+    for (size_t i = 0; i < len; i++)
+    {
+        assert((array[i] == (T)i));
+    }
+}
+
+#define verify_size(base)                                                                                              \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        void *after = sbrk(0);                                                                                         \
+        assert(_num_allocated_bytes() + aligned_size(_size_meta_data() * _num_allocated_blocks()) ==                  \
+                (size_t)after - (size_t)base);                                                                         \
+    } while (0)
+
+#define verify_size_with_large_blocks(base, diff)                                                                      \
+    do                                                                                                                 \
+    {                                                                                                                  \
+        void *after = sbrk(0);                                                                                         \
+        assert(diff == (size_t)after - (size_t)base);                                                                 \
+    } while (0)
+
+static inline size_t aligned_size(size_t size)
+{
+    return size;
+}
+
+void verify_blocks(size_t allocated_blocks, size_t allocated_bytes, size_t free_blocks, size_t free_bytes) {
     assert(_num_free_blocks() == free_blocks);
     assert(_num_free_bytes() == free_bytes);
     assert(_num_allocated_blocks() == allocated_blocks);
     assert(_num_allocated_bytes() == allocated_bytes);
-    assert(_num_meta_data_bytes() == meta_data_bytes);
 }
 
-void update_stat(size_t *free_blocks, size_t *free_bytes, size_t *allocated_blocks, size_t *allocated_bytes,
-                ssize_t fblocks_num, ssize_t fbytes_num, ssize_t ablocks_num, ssize_t abytes_num) {
+void update_stat(size_t *allocated_blocks, size_t *allocated_bytes, size_t *free_blocks, size_t *free_bytes,
+                ssize_t ablocks_num, ssize_t abytes_num, ssize_t fblocks_num, ssize_t fbytes_num) {
     *free_blocks += fblocks_num;
     *free_bytes += fbytes_num;
     *allocated_blocks += ablocks_num;
     *allocated_bytes += abytes_num;
 }
 
-void test1() {
-    assert_stat(0,0,0,0,0);
-    size_t free_blocks = 0;
-    size_t free_bytes = 0;
-    size_t allocated_blocks = 0; 
-    size_t allocated_bytes = 0;
-    
-    int *a = (int*)smalloc(10 * sizeof(int));
-    allocated_blocks += 1;
-    allocated_bytes += 10 * sizeof(int);
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
-    
-    sfree(a);
-    free_blocks += 1;
-    free_bytes += 10 * sizeof(int);
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
-}
+void test() {
+    verify_blocks(0, 0, 0, 0);
+    void *base = sbrk(0);
+    char *pad1 = (char *)smalloc(32);
+    char *a = (char *)smalloc(32);
+    char *b = (char *)smalloc(32);
+    char *c = (char *)smalloc(32);
+    assert(pad1 != nullptr);
+    assert(a != nullptr);
+    assert(b != nullptr);
+    assert(c != nullptr);
 
-void test2() {
-    assert_stat(0,0,0,0,0);
-    size_t free_blocks = 0;
-    size_t free_bytes = 0;
-    size_t allocated_blocks = 0; 
-    size_t allocated_bytes = 0;
-    
-    int *a = (int*)scalloc(10, sizeof(int));
-    update_stat(&free_blocks, &free_bytes, &allocated_blocks, &allocated_bytes, 0, 0, 1, 10*sizeof(int));
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
-    
-    int *b = (int*)scalloc(5, sizeof(int));
-    update_stat(&free_blocks, &free_bytes, &allocated_blocks, &allocated_bytes, 0, 0, 1, 5*sizeof(int));
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
+    size_t pad_size = 32;
+
+    verify_blocks(4, 32 * 3 + pad_size, 0, 0);
+    verify_size(base);
+    populate_array(b, 32);
 
     sfree(a);
-    update_stat(&free_blocks, &free_bytes, &allocated_blocks, &allocated_bytes, 1, 10*sizeof(int), 0, 0);
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
-
-    int *c = (int*)scalloc(7, sizeof(int));
-    update_stat(&free_blocks, &free_bytes, &allocated_blocks, &allocated_bytes, -1, -10*sizeof(int), 0, 0);
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
-
-    c = (int*)srealloc(c, 13 * sizeof(int));
-    update_stat(&free_blocks, &free_bytes, &allocated_blocks, &allocated_bytes, 1, 10*sizeof(int), 1, 13*sizeof(int));
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
-    
-    sfree(b);
-    update_stat(&free_blocks, &free_bytes, &allocated_blocks, &allocated_bytes, 1, 5*sizeof(int), 0, 0);
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
-
     sfree(c);
-    update_stat(&free_blocks, &free_bytes, &allocated_blocks, &allocated_bytes, 1, 13*sizeof(int), 0, 0);
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
-}
+    verify_blocks(4, 32 * 3 + pad_size, 2, 32 * 2);
+    verify_size(base);
 
-// malloc a,b free a, calloc c, realloc c to new one, free all
-void test3() {
-    assert_stat(0,0,0,0,0);
-    size_t free_blocks = 0;
-    size_t free_bytes = 0;
-    size_t allocated_blocks = 0; 
-    size_t allocated_bytes = 0;
-    
-    int *a = (int*)smalloc(10 * sizeof(int));
-    update_stat(&free_blocks, &free_bytes, &allocated_blocks, &allocated_bytes, 0, 0, 1, 10*sizeof(int));
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
-    
-    int *b = (int*)smalloc(10 * sizeof(int));
-    update_stat(&free_blocks, &free_bytes, &allocated_blocks, &allocated_bytes, 0, 0, 1, 10*sizeof(int));
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
-    
-    sfree(a);
-    update_stat(&free_blocks, &free_bytes, &allocated_blocks, &allocated_bytes, 1, 10*sizeof(int), 0, 0);
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
+    char *new_b = (char *)srealloc(b, 32 * 4 + _size_meta_data() * 2);
+    assert(new_b != nullptr);
+    assert(new_b == a);
+    verify_blocks(2, 32 * 4 + 2 * _size_meta_data() + pad_size, 0, 0);
+    verify_size(base);
+    validate_array(new_b, 32);
 
-    int *c = (int*)scalloc(5, sizeof(int));
-    update_stat(&free_blocks, &free_bytes, &allocated_blocks, &allocated_bytes, -1, -10*sizeof(int),0, 0);
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
+    sfree(new_b);
+    verify_blocks(2, 32 * 4 + 2 * _size_meta_data() + pad_size, 1, 32 * 4 + 2 * _size_meta_data());
+    verify_size(base);
 
-    b = (int*)srealloc(b, 12*sizeof(int));
-    update_stat(&free_blocks, &free_bytes, &allocated_blocks, &allocated_bytes, 1,10*sizeof(int),1,12*sizeof(int));
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
-
-    c = (int*)srealloc(c, 10*sizeof(int));
-    update_stat(&free_blocks, &free_bytes, &allocated_blocks, &allocated_bytes,0,0,0,0);
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
-
-    sfree(b);
-    update_stat(&free_blocks, &free_bytes, &allocated_blocks, &allocated_bytes, 1, 12*sizeof(int), 0, 0);
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
-
-    sfree(c);
-    update_stat(&free_blocks, &free_bytes, &allocated_blocks, &allocated_bytes, 1, 10*sizeof(int), 0, 0);
-    assert_stat(free_blocks,free_bytes,allocated_blocks,allocated_bytes,allocated_blocks*sizeof(metadata_t));
+    sfree(pad1);
+    verify_blocks(1, 32 * 4 + 3 * _size_meta_data() + pad_size, 1, 32 * 4 + 3 * _size_meta_data() + pad_size);
+    verify_size(base);
 }
 
 int main() {
-    test3();
+    test();
 }

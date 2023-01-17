@@ -28,7 +28,7 @@ static metadata_t list_head = {0, false, nullptr, nullptr};
 
 void* smalloc(size_t size) {
     size_t real_size = size + sizeof(metadata_t);
-    if(size == 0 || real_size > MAX_SIZE){
+    if(size == 0 || size > MAX_SIZE){
         return NULL;
     }
     metadata_t *tmp = list_head.next;
@@ -79,7 +79,7 @@ void sfree(void* p) {
 
 void* srealloc(void* oldp, size_t size) {
     size_t real_size = size + sizeof(metadata_t);
-    if(size == 0 || real_size > MAX_SIZE){
+    if(size == 0 || size > MAX_SIZE){
         return NULL;
     }
     if(oldp == nullptr){
