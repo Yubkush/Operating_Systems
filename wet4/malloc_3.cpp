@@ -1,8 +1,8 @@
 #include <unistd.h>
 #include <cstring>
-#include <list>
 #include <random>
 #include <limits>
+#include <algorithm>
 #include <sys/mman.h>
 #define MAX_SIZE (size_t)1e8
 #define MMAP_THRESH (size_t)128*1024
@@ -11,7 +11,7 @@
 
 using std::memset;
 using std::memmove;
-using std::list;
+using std::min;
 
 enum class FreeBlocks {not_found, small, big};
 
@@ -367,7 +367,7 @@ void* srealloc(void* oldp, size_t size) {
         }
         void *newp = memoryMap(size + sizeof(metadata_t));
         checkCookies(p_meta);
-        memmove(newp, oldp, p_meta->size);
+        memmove(newp, oldp, min(p_meta->size, size));
         munmap(oldp, p_meta->size);
         return newp;
     }
@@ -414,13 +414,13 @@ void* srealloc(void* oldp, size_t size) {
         }
         stats.num_allocated_bytes += size - block_list.wilderness->size;
         block_list.wilderness->size += size - block_list.wilderness->size;
-        memmove((char*)block_list.wilderness + meta_s, oldp, p_meta->size);
+        // memmove((char*)block_list.wilderness + meta_s, oldp, p_meta->size);
         return (char*)block_list.wilderness + meta_s;
     }
     if(p_meta->addr_next != nullptr && p_meta->addr_next->is_free && p_meta->addr_next->size + p_meta->size + meta_s >= size) {   // 1.d
         block_list.mergeBlocks(p_meta);
         splitRealloc(size, p_meta);
-        memmove((char*)p_meta + meta_s, oldp, p_meta->size);
+        // memmove((char*)p_meta + meta_s, oldp, p_meta->size);
         return (char*)p_meta + meta_s;
     }
     if(p_meta->addr_next != nullptr && p_meta->addr_next->is_free && 
