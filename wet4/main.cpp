@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cassert>
 
+#define MMAP_THRESHOLD (128 * 1024)
 #define MAX_ALLOCATION_SIZE (1e8)
 #define MIN_SPLIT_SIZE (128)
 
@@ -74,39 +75,32 @@ void update_stat(size_t *allocated_blocks, size_t *allocated_bytes, size_t *free
 void test() {
     verify_blocks(0, 0, 0, 0);
     void *base = sbrk(0);
-    char *pad1 = (char *)smalloc(32);
-    char *a = (char *)smalloc(32);
+    char *a = (char *)smalloc(MIN_SPLIT_SIZE + 32);
     char *b = (char *)smalloc(32);
     char *c = (char *)smalloc(32);
-    assert(pad1 != nullptr);
     assert(a != nullptr);
     assert(b != nullptr);
     assert(c != nullptr);
 
-    size_t pad_size = 32;
-
-    verify_blocks(4, 32 * 3 + pad_size, 0, 0);
+    verify_blocks(3, MIN_SPLIT_SIZE + 32 * 3, 0, 0);
     verify_size(base);
     populate_array(b, 32);
 
     sfree(a);
     sfree(c);
-    verify_blocks(4, 32 * 3 + pad_size, 2, 32 * 2);
+    verify_blocks(3, MIN_SPLIT_SIZE + 32 * 3, 2, MIN_SPLIT_SIZE + 32 * 2);
     verify_size(base);
 
-    char *new_b = (char *)srealloc(b, 32 * 4 + _size_meta_data() * 2);
+    char *new_b = (char *)srealloc(b, 64);
     assert(new_b != nullptr);
     assert(new_b == a);
-    verify_blocks(2, 32 * 4 + 2 * _size_meta_data() + pad_size, 0, 0);
+    verify_blocks(2, MIN_SPLIT_SIZE + 32 * 3 + _size_meta_data(), 1, MIN_SPLIT_SIZE + 32 + _size_meta_data());
     verify_size(base);
     validate_array(new_b, 32);
 
     sfree(new_b);
-    verify_blocks(2, 32 * 4 + 2 * _size_meta_data() + pad_size, 1, 32 * 4 + 2 * _size_meta_data());
-    verify_size(base);
-
-    sfree(pad1);
-    verify_blocks(1, 32 * 4 + 3 * _size_meta_data() + pad_size, 1, 32 * 4 + 3 * _size_meta_data() + pad_size);
+    verify_blocks(1, MIN_SPLIT_SIZE + 32 * 3 + 2 * _size_meta_data(), 1,
+                  MIN_SPLIT_SIZE + 32 * 3 + 2 * _size_meta_data());
     verify_size(base);
 }
 
