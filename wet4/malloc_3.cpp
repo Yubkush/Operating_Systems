@@ -377,7 +377,7 @@ void* srealloc(void* oldp, size_t size) {
     checkCookies(p_meta->addr_next);
     checkCookies(block_list.wilderness);
     if(p_meta->size >= size){   // 1.a
-        splitRealloc(size, (metadata_t*)oldp);
+        splitRealloc(size, p_meta);
         return oldp;
     }
     if(p_meta->addr_prev != nullptr && p_meta->addr_prev->is_free) {   // 1.b
@@ -400,10 +400,11 @@ void* srealloc(void* oldp, size_t size) {
             return (char*)prev + meta_s;
         }
         else if(p_meta->addr_prev->size + p_meta->size + meta_s >= size) {
+            size_t copy_size = p_meta->size;
             metadata_t *prev = p_meta->addr_prev;
             block_list.mergeBlocks(p_meta->addr_prev);
             splitRealloc(size, prev);
-            memmove((char*)prev + meta_s, oldp, p_meta->size);
+            memmove((char*)prev + meta_s, oldp, copy_size);
             return (char*)prev + meta_s;
         }
     }
