@@ -205,6 +205,9 @@ class MemManage {
             if(block == wilderness) {
                 wilderness = new_block;
             }
+
+            if(new_block->addr_next != nullptr && new_block->addr_next->is_free)
+                mergeBlocks(new_block);
         }
 
         void mergeBlocks(metadata_t* block) {
@@ -372,6 +375,7 @@ void* srealloc(void* oldp, size_t size) {
         return newp;
     }
     metadata_t *p_meta = (metadata_t*)oldp - 1;
+    size_t p_size = p_meta->size;
     checkCookies(p_meta);
     checkCookies(p_meta->addr_prev);
     checkCookies(p_meta->addr_next);
@@ -396,15 +400,14 @@ void* srealloc(void* oldp, size_t size) {
             else {
                 splitRealloc(size, prev);
             }
-            memmove((char*)prev + meta_s, oldp, p_meta->size);
+            memmove((char*)prev + meta_s, oldp, p_size);
             return (char*)prev + meta_s;
         }
         else if(p_meta->addr_prev->size + p_meta->size + meta_s >= size) {
-            size_t copy_size = p_meta->size;
             metadata_t *prev = p_meta->addr_prev;
-            block_list.mergeBlocks(p_meta->addr_prev);
+            block_list.mergeBlocks(prev);
             splitRealloc(size, prev);
-            memmove((char*)prev + meta_s, oldp, copy_size);
+            memmove((char*)prev + meta_s, oldp, p_size);
             return (char*)prev + meta_s;
         }
     }
@@ -429,9 +432,9 @@ void* srealloc(void* oldp, size_t size) {
             p_meta->addr_next->size + p_meta->addr_prev->size + p_meta->size + (2*meta_s) >= size) {   // 1.e
         metadata_t *prev = p_meta->addr_prev;
         block_list.mergeBlocks(p_meta);
-        block_list.mergeBlocks(p_meta->addr_prev);
+        block_list.mergeBlocks(prev);
         splitRealloc(size, prev);
-        memmove((char*)prev + meta_s, oldp, p_meta->size);
+        memmove((char*)prev + meta_s, oldp, p_size);
         return (char*)prev + meta_s;
     }
     if(p_meta->addr_next != nullptr && p_meta->addr_next->is_free && p_meta->addr_next == block_list.wilderness) {    // 1.f
@@ -445,12 +448,12 @@ void* srealloc(void* oldp, size_t size) {
         }
         stats.num_allocated_bytes += size - block_list.wilderness->size;
         block_list.wilderness->size += size - block_list.wilderness->size;
-        memmove((char*)block_list.wilderness + meta_s, oldp, p_meta->size);
+        memmove((char*)block_list.wilderness + meta_s, oldp, p_size);
         return (char*)block_list.wilderness + meta_s;
     }
     void* newp = smalloc(size);
     if(newp == nullptr){return NULL;}
-    memmove(newp, oldp, p_meta->size);
+    memmove(newp, oldp, p_size);
     sfree(oldp);
     return newp;
 }
