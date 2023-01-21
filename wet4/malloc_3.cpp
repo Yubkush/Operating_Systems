@@ -56,12 +56,12 @@ class MemManage {
         metadata_t free_head;
         metadata_t *wilderness;
         MemManage(): wilderness(nullptr) {
-            addr_head = {cookies, 0, false , nullptr, nullptr, nullptr, nullptr};
-            free_head = {cookies, 0, false , nullptr, nullptr, nullptr, nullptr};
             std::random_device rd;
             std::mt19937 gen(rd());
             std::uniform_int_distribution<> dist(std::numeric_limits<int>::min(), std::numeric_limits<int>::max());
             cookies = dist(gen);
+            addr_head = {cookies, 0, false , nullptr, nullptr, nullptr, nullptr};
+            free_head = {cookies, 0, false , nullptr, nullptr, nullptr, nullptr};
         }
 
         __int32_t getCookies() { return this->cookies; }
@@ -69,6 +69,7 @@ class MemManage {
         ~MemManage() = default;
         void createBlock(size_t size, metadata_t *addr) {
             metadata_t* tmp = addr_head.addr_next;
+            addr->cookies = cookies;
             // insert to addr list
             if(tmp == nullptr) { // addr list is empty
                 addr_head.addr_next = addr;
@@ -89,7 +90,6 @@ class MemManage {
             // update block 
             addr->is_free = false;
             addr->size = size;
-            addr->cookies = cookies;
             wilderness = addr;
             // update stats
             stats.num_allocated_blocks++;
@@ -141,14 +141,15 @@ class MemManage {
             if(block->size_prev == nullptr) { // first node in list, update head
                 free_head.size_next = block->size_next;
             }
-            checkCookies(block->size_prev);
-            checkCookies(block->size_next);
             // update list
-            if(block->size_prev != nullptr)
+            if(block->size_prev != nullptr){
+                checkCookies(block->size_prev);
                 block->size_prev->size_next = block->size_next;
-            if(block->size_next != nullptr)
+            }
+            if(block->size_next != nullptr){
+                checkCookies(block->size_next);
                 block->size_next->size_prev = block->size_prev;
-            
+            }
             block->is_free = false;
             block->size_next = nullptr;
             block->size_prev = nullptr;
@@ -205,7 +206,7 @@ class MemManage {
             if(block == wilderness) {
                 wilderness = new_block;
             }
-
+            checkCookies(new_block->addr_next);
             if(new_block->addr_next != nullptr && new_block->addr_next->is_free)
                 mergeBlocks(new_block);
         }
@@ -231,6 +232,8 @@ class MemManage {
                 insertFreeBlock(block);
             }
             // remove node from addr list
+            checkCookies(block);
+            checkCookies(block->addr_next);
             block->addr_next = block->addr_next->addr_next;
             if(block->addr_next != nullptr)
                 block->addr_next->addr_prev = block;
@@ -339,6 +342,7 @@ void sfree(void* p) {
     }
     block_list.insertFreeBlock(p_meta);
     // merge free blocks ***chalange 2
+    checkCookies(p_meta);
     checkCookies(p_meta->addr_next);
     if(p_meta->addr_next != nullptr && p_meta->addr_next->is_free) {
         block_list.mergeBlocks(p_meta);
@@ -365,6 +369,7 @@ void* srealloc(void* oldp, size_t size) {
     }
     if(size >= MMAP_THRESH) {    // use mmap
         metadata_t *p_meta = (metadata_t*)oldp - 1;
+        checkCookies(p_meta);
         if(p_meta->size == size) {
             return oldp;
         }
@@ -389,6 +394,7 @@ void* srealloc(void* oldp, size_t size) {
             metadata_t *prev = p_meta->addr_prev;
             block_list.mergeBlocks(prev);
             // enlarging the wilderness block
+            checkCookies(block_list.wilderness);
             if(block_list.wilderness->size < size) {
                 void *res = sbrk(size - block_list.wilderness->size);
                 if(*(ssize_t*)res == SYSCALL_FAIL) {
@@ -412,6 +418,7 @@ void* srealloc(void* oldp, size_t size) {
         }
     }
     if(p_meta == block_list.wilderness) {  // 1.c
+        checkCookies(block_list.wilderness);
         void *res = sbrk(size - block_list.wilderness->size);
         if(*(ssize_t*)res == SYSCALL_FAIL) {
             return NULL;
@@ -439,9 +446,12 @@ void* srealloc(void* oldp, size_t size) {
     }
     if(p_meta->addr_next != nullptr && p_meta->addr_next->is_free && p_meta->addr_next == block_list.wilderness) {    // 1.f
         block_list.mergeBlocks(p_meta);
+        checkCookies(p_meta);
+        checkCookies(p_meta->addr_prev);
         if(p_meta->addr_prev != nullptr && p_meta->addr_prev->is_free) { // 1.f.i
             block_list.mergeBlocks(p_meta->addr_prev);
         }
+        checkCookies(block_list.wilderness);
         void *res = sbrk(size - block_list.wilderness->size);
         if(*(ssize_t*)res == SYSCALL_FAIL) {
             return NULL;

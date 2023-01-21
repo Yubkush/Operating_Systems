@@ -1,4 +1,5 @@
 #include "my_stdlib.h"
+#include <sys/wait.h>
 #include <catch2/catch_test_macros.hpp>
 
 #include <unistd.h>
@@ -39,17 +40,28 @@ static inline size_t aligned_size(size_t size)
 
 TEST_CASE("cookie overflow", "[malloc3]")
 {
-    verify_blocks(0, 0, 0, 0);
+    int res = fork();
+    if(res == 0) {
+        verify_blocks(0, 0, 0, 0);
 
-    void *base = sbrk(0);
-    char *a = (char *)smalloc(10);
-    char *b = (char *)smalloc(10);
-    REQUIRE(a != nullptr);
-    REQUIRE(b != nullptr);
+        void *base = sbrk(0);
+        char *a = (char *)smalloc(10);
+        char *b = (char *)smalloc(10);
+        REQUIRE(a != nullptr);
+        REQUIRE(b != nullptr);
 
-    verify_blocks(2, 20, 0, 0);
-    verify_size(base);
-    
-    strcpy(a, "cookie destroyer");
-    sfree(a);
+        verify_blocks(2, 20, 0, 0);
+        verify_size(base);
+        
+        strcpy(a, "cookie destroyer");
+
+        sfree(a);
+        sfree(b);
+        exit(0);
+    }
+    int status = 0;
+    waitpid(res, &status, 0);
+    REQUIRE((WIFEXITED(status)));
+	// returns only 8 lowest bits
+    REQUIRE((0xef == WEXITSTATUS(status)));
 }

@@ -26,7 +26,7 @@ catch_discover_tests(malloc_2_test TEST_PREFIX malloc_2.)
 target_compile_options(malloc_2_test PRIVATE -Wall PRIVATE -pedantic-errors PRIVATE -Werror)
 
 add_executable(malloc_3_test malloc_3_test_basic.cpp malloc_3_test_reuse.cpp
-    malloc_3_test_scalloc.cpp malloc_3_test_split_and_merge.cpp
+    malloc_3_test_scalloc.cpp malloc_3_test_split_and_merge.cpp malloc_3_test_cookies.cpp
     malloc_3_test_srealloc.cpp malloc_3_test_srealloc_cases.cpp
     ${SOURCE_DIR}/malloc_3.cpp)
 target_link_libraries(malloc_3_test PRIVATE Catch2::Catch2WithMain)
