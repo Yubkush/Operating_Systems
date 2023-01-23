@@ -207,8 +207,8 @@ class MemManage {
                 wilderness = new_block;
             }
             checkCookies(new_block->addr_next);
-            if(new_block->addr_next != nullptr && new_block->addr_next->is_free)
-                mergeBlocks(new_block);
+            // if(new_block->addr_next != nullptr && new_block->addr_next->is_free)
+            //     mergeBlocks(new_block);
         }
 
         void mergeBlocks(metadata_t* block) {
